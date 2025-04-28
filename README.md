@@ -1,6 +1,7 @@
 # nutanix-prometheus-exporter
 
-A python based prometheus exporter that extracts metrics from the Nutanix API or the Redfish API from out-of-band management modules of hardware nodes in a Nutanix cluster.
+A python based prometheus exporter that extracts metrics from the Nutanix API or the Redfish API from out-of-band management modules of hardware nodes in a Nutanix cluster.  
+These metrics can then be scraped by any prometheus compatible product and leveraged in a dashboarding application with a compatible data source type (exp: a Prometheus server or InfluxDB instance scrapes the metrics and is then configured as a data source in Grafana).
 
 The exporter has 3 differention mode of operations:  
 
