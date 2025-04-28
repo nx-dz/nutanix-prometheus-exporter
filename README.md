@@ -3,6 +3,9 @@
 A python based prometheus exporter that extracts metrics from the Nutanix API or the Redfish API from out-of-band management modules of hardware nodes in a Nutanix cluster.  
 These metrics can then be scraped by any prometheus compatible product and leveraged in a dashboarding application with a compatible data source type (exp: a Prometheus server or InfluxDB instance scrapes the metrics and is then configured as a data source in Grafana).
 
+> [!TIP]
+> a linux/amd64 pre-built image can be pulled directly from ghcr.io/sbourdeaud/nutanix-prometheus-exporter:latest if you do not want to build the image yourself.
+
 The exporter has 3 differention mode of operations:  
 
 1. *legacy*: this mode targets a single Prism element OR Prism Central and extracts performance metrics from the Nutanix API using v1, v2 and v3 endpoints.  When targeting Prism element, you can also retrieve storage containers, vms and IPMI metrics using environment variables to enable or disable the collection for these entity types.  When targeting Prism Central, you get in return a count for different entity types (vm count, vg count, vdisk count, etc...).  
