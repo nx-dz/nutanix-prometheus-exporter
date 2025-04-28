@@ -8,7 +8,8 @@ The exporter has 3 differention mode of operations:
 2. *redfish*: this mode targets a bunch of IPMI interfaces on hardware nodes and collects power consumption and thermal metrics.  
 3. *v4*: this mode is **not yet functional** and is work in progress.  It targets a Prism Central instance and collects metrics from all available entities using v4 API calls and multi-threading for better performance.  
 
-> [!WARNING] v4 mode of operations is not yet functional and is a work in progress.  Do not use for now.
+> [!WARNING] 
+> v4 mode of operations is not yet functional and is a work in progress.  Do not use for now.
 
 For available environment variables that are used to control the behavior and configuration of this prometheus exporter, review the Dockerfile content.
 
@@ -18,7 +19,8 @@ From the **build** directory, run (if using podman, rename `dockerfile` to `Dock
 
  `docker build -t nutanix-prometheus-exporter .`
 
-> [!TIP] It is recommended to tag your image build with the correct processor architecture you are building it for (such as Linux/arm64 or Linux/amd64).  With podman this can be achieved with the --platform parameter when using the build command.
+> [!TIP] 
+> It is recommended to tag your image build with the correct processor architecture you are building it for (such as Linux/arm64 or Linux/amd64).  With podman this can be achieved with the --platform parameter when using the build command.
 
  ## Running the container
 
@@ -29,7 +31,8 @@ From the **build** directory, run (if using podman, rename `dockerfile` to `Dock
 ```sh
 docker run -d --name nutanix-exporter-1 -p 8000:8000 -e PRISM=192.168.0.10 -e PRISM_USERNAME=admin -e PRISM_SECRET=mysecret nutanix-prometheus-exporter
 ```
-> [!IMPORTANT] The above command assumes that you have previsouly created a secret called PRISM_SECRET.
+> [!IMPORTANT] 
+> The above command assumes that you have previsouly created a secret called PRISM_SECRET.
 
  You can then open your browser to [http://localhost:8000](http://localhost:8000) to verify metrics are being published correctly.
 
