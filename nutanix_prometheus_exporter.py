@@ -67,6 +67,11 @@ class NutanixMetrics:
         self.pwd = pwd
         self.prism_secure = prism_secure
         self.vm_list = vm_list
+        
+        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [INFO] Initializing v4 API metrics...{PrintColors.RESET}")
+        #todo: retrieve all available metrics from aiops
+        #todo: init metrics per entity type
+        #todo: add entity count metrics
 
     def run_metrics_loop(self):
         """Metrics fetching loop"""
@@ -83,8 +88,8 @@ class NutanixMetrics:
         new values.
         """
 
-        limit=50
-        
+        limit=100
+
         #region #?clusters
         #* initialize variable for API client configuration
         api_client_configuration = ntnx_clustermgmt_py_client.Configuration()
@@ -1521,10 +1526,12 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,sampling_interv
     entity_api = entity_api_module(api_client=client)
     get_stats_function = getattr(entity_api, function)
     
-    start_time = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
-    end_time = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    start_time = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
+    end_time = (datetime.now(timezone.utc)).isoformat()
     response = get_stats_function(entity, _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type, _select='*')
     metrics = response.data.to_dict()
+    
+    #todo: populate metrics based on entity available list
     return metrics
 
 
