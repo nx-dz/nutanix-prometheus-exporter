@@ -13,17 +13,25 @@
 
 #region #*IMPORT
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
 import traceback
 import json
 import time
 import re
+import math
 import socket
 import ipaddress
 import urllib3
 import requests
+import tqdm
+from humanfriendly import format_timespan
 from prometheus_client import start_http_server, Gauge, Info
+
+import ntnx_vmm_py_client
+import ntnx_clustermgmt_py_client
+import ntnx_networking_py_client
+import ntnx_prism_py_client
 #endregion #*IMPORT
 
 
@@ -32,8 +40,11 @@ class PrintColors:
     """ used in print statements for colored output
     """
     OK = '\033[92m' #GREEN
+    SUCCESS = '\033[96m' #CYAN
+    DATA = '\033[097m' #WHITE
     WARNING = '\033[93m' #YELLOW
     FAIL = '\033[91m' #RED
+    STEP = '\033[95m' #PURPLE
     RESET = '\033[0m' #RESET COLOR
 
 
@@ -43,13 +54,9 @@ class NutanixMetrics:
     application metrics into Prometheus metrics.
     """
     def __init__(self,
-                 ipmi_username='ADMIN', ipmi_secret=None,
                  app_port=9440, polling_interval_seconds=30, api_requests_timeout_seconds=30, api_requests_retries=5, api_sleep_seconds_between_retries=15,
                  prism='127.0.0.1', user='admin', pwd='Nutanix/4u', prism_secure=False,
-                 vm_list='',
-                 cluster_metrics=True, storage_containers_metrics=True, ipmi_metrics=True, prism_central_metrics=False, ncm_ssp_metrics=False):
-        self.ipmi_username = ipmi_username
-        self.ipmi_secret = ipmi_secret
+                 vm_list=''):
         self.app_port = app_port
         self.polling_interval_seconds = polling_interval_seconds
         self.api_requests_timeout_seconds = api_requests_timeout_seconds
@@ -60,11 +67,6 @@ class NutanixMetrics:
         self.pwd = pwd
         self.prism_secure = prism_secure
         self.vm_list = vm_list
-        self.cluster_metrics = cluster_metrics
-        self.storage_containers_metrics = storage_containers_metrics
-        self.ipmi_metrics = ipmi_metrics
-        self.prism_central_metrics = prism_central_metrics
-        self.ncm_ssp_metrics = ncm_ssp_metrics
 
     def run_metrics_loop(self):
         """Metrics fetching loop"""
@@ -80,7 +82,80 @@ class NutanixMetrics:
         Get metrics from application and refresh Prometheus metrics with
         new values.
         """
-        pass
+
+        limit=50
+        
+        #region #?clusters
+        #* initialize variable for API client configuration
+        api_client_configuration = ntnx_clustermgmt_py_client.Configuration()
+        api_client_configuration.host = self.prism
+        api_client_configuration.username = self.user
+        api_client_configuration.password = self.pwd
+
+        if self.prism_secure is False:
+            #! suppress warnings about insecure connections
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            #! suppress ssl certs verification
+            api_client_configuration.verify_ssl = False
+
+        #* getting list of clusters
+        client = ntnx_clustermgmt_py_client.ApiClient(configuration=api_client_configuration)
+        entity_api = ntnx_clustermgmt_py_client.ClustersApi(api_client=client)
+        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Clusters...{PrintColors.RESET}")
+        entity_list=[]
+        response = entity_api.list_clusters(_page=0,_limit=1)
+        total_available_results=response.metadata.total_available_results
+        page_count = math.ceil(total_available_results/limit)
+        with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(
+                        v4_get_entities,
+                        module=ntnx_clustermgmt_py_client,
+                        entity_api='ClustersApi',
+                        client=client,
+                        function='list_clusters',
+                        page=page_number,
+                        limit=limit
+                    ) for page_number in range(0, page_count, 1)]
+                for future in as_completed(futures):
+                    try:
+                        entities = future.result()
+                        entity_list.extend(entities.data)
+                    except Exception as e:
+                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                    finally:
+                        progress_bar.update(1)
+        cluster_list = entity_list
+
+        #* get metrics for each cluster
+        cluster_ext_id_list = []
+        metrics=[]
+        for entity in cluster_list:
+            if 'PRISM_CENTRAL' in entity.config.cluster_function:
+                continue
+            cluster_ext_id_list.append(entity.ext_id)
+        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(cluster_ext_id_list)} entities...{PrintColors.RESET}")
+        with tqdm.tqdm(total=len(cluster_ext_id_list), desc="Fetching cluster metrics") as progress_bar:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(
+                        v4_get_entity_stats,
+                        client=client,
+                        module=ntnx_clustermgmt_py_client,
+                        entity_api='ClustersApi',
+                        function='get_cluster_stats',
+                        entity=cluster,
+                        sampling_interval=30,
+                        stat_type='LAST'
+                    ) for cluster in cluster_ext_id_list]
+                for future in as_completed(futures):
+                    try:
+                        entities = future.result()
+                        metrics.extend(entities)
+                    except Exception as e:
+                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                    finally:
+                        progress_bar.update(1)
+        #endregion #?clusters
 
 
 class NutanixMetricsLegacy:
@@ -1411,12 +1486,46 @@ def get_entities_batch(api_server, username, password, offset, entity_type, enti
         return []
 
 
-def v4_get_entities():
-    pass
+def v4_get_entities(client,module,entity_api,function,page,limit=50):
+    '''v4_get_entities function.
+        Args:
+            client: a v4 Python SDK client object.
+            module: name of the v4 Python SDK module to use.
+            entity_api: name of the entity API to use.
+            function: name of the function to use.
+            page: page number to fetch.
+            limit: number of entities to fetch.
+        Returns:
+    '''
+    entity_api_module = getattr(module, entity_api)
+    entity_api = entity_api_module(api_client=client)
+    list_function = getattr(entity_api, function)
+    response = list_function(_page=page,_limit=limit)
+    return response
 
 
-def v4_get_entity_stats():
-    pass
+def v4_get_entity_stats(client,module,entity_api,function,entity,sampling_interval,stat_type):
+    '''v4_get_entity_stats function.
+       Fetches metrics for a specified vm and generates graphs for that entity.
+        Args:
+            client: a v4 Python SDK client object.
+            entity: an entity uuid/ext_id
+            minutes_ago: integer indicating the number of minutes to get metrics for (exp: 60 would mean get the metrics for the last hour).
+            sampling_interval: integer used to specify in seconds the sampling interval.
+            stat_type: The operator to use while performing down-sampling on stats data. Allowed values are SUM, MIN, MAX, AVG, COUNT and LAST.
+        Returns:
+    '''
+
+    #* fetch metrics for entity
+    entity_api_module = getattr(module, entity_api)
+    entity_api = entity_api_module(api_client=client)
+    get_stats_function = getattr(entity_api, function)
+    
+    start_time = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    end_time = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    response = get_stats_function(entity, _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type, _select='*')
+    metrics = response.data.to_dict()
+    return metrics
 
 
 def main():
@@ -1522,14 +1631,7 @@ def main():
             user = os.getenv('PRISM_USERNAME'),
             pwd = os.getenv('PRISM_SECRET'),
             prism_secure=prism_secure,
-            ipmi_username = os.getenv('IPMI_USERNAME', default='ADMIN'),
-            ipmi_secret = os.getenv('IPMI_SECRET', default=None),
-            vm_list=os.getenv('VM_LIST'),
-            cluster_metrics=cluster_metrics,
-            storage_containers_metrics=storage_containers_metrics,
-            ipmi_metrics=ipmi_metrics,
-            prism_central_metrics=prism_central_metrics,
-            ncm_ssp_metrics=ncm_ssp_metrics
+            vm_list=os.getenv('VM_LIST')
         )
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Starting http server on port {exporter_port}{PrintColors.RESET}")
         start_http_server(exporter_port)

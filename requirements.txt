@@ -1,2 +1,7 @@
 prometheus-client
 requests
+tqdm
+ntnx_vmm_py_client
+ntnx_clustermgmt_py_client
+ntnx_networking_py_client
+ntnx_prism_py_client
