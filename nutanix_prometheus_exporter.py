@@ -86,7 +86,7 @@ class NutanixMetrics:
         stats_count = 0
         
         #region #?clusters
-        if self.cluster_metrics == 'True':
+        if self.cluster_metrics:
             #* processing classes in clustermgmt
             ntnx_clustermgmt_py_client_stats = ['HostStats','ClusterStats']
             if self.storage_containers_metrics:
@@ -111,7 +111,7 @@ class NutanixMetrics:
         #endregion #?clusters
 
         #region #?networking
-        if self.networking_metrics == 'True':
+        if self.networking_metrics:
             #* processing classes in networking
             ntnx_networking_py_client_stats = ['Layer2StretchStats','LoadBalancerSessionStats','TrafficMirrorStats','VpcNsStats','VpnConnectionStats']
             for class_name in ntnx_networking_py_client_stats:
@@ -161,7 +161,7 @@ class NutanixMetrics:
         #endregion #?vmm
 
         #region #?files
-        if self.files_metrics == 'True':
+        if self.files_metrics:
             #* processing classes in files
             ntnx_files_py_client_stats = ['AntivirusStats','FileServerStats','MountTargetStats']
             for class_name in ntnx_files_py_client_stats:
@@ -182,7 +182,7 @@ class NutanixMetrics:
         #endregion #?files
         
         #region #?object
-        if self.object_metrics == 'True':
+        if self.object_metrics:
             #* processing classes in objects
             ntnx_objects_py_client_stats = ['ObjectstoreStats']
             for class_name in ntnx_objects_py_client_stats:
@@ -203,7 +203,7 @@ class NutanixMetrics:
         #endregion #?object
         
         #region #?volumes
-        if self.volumes_metrics == 'True':
+        if self.volumes_metrics:
             #* processing classes in volumes
             ntnx_volumes_py_client_stats = ['VolumeDiskStats','VolumeGroupStats']
             for class_name in ntnx_volumes_py_client_stats:
@@ -262,7 +262,7 @@ class NutanixMetrics:
         
         
         #region #?clusters
-        if self.cluster_metrics == 'True':
+        if self.cluster_metrics:
             #* getting list of clusters
             entity_api = ntnx_clustermgmt_py_client.ClustersApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Clusters...{PrintColors.RESET}")
@@ -332,7 +332,7 @@ class NutanixMetrics:
         #endregion #?clusters
 
         #region #?hosts
-        if self.hosts_metrics == 'True':
+        if self.hosts_metrics:
             #* getting list of hosts
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Hosts...{PrintColors.RESET}")
             entity_list=[]
@@ -544,7 +544,7 @@ class NutanixMetrics:
 
 
         #region #?networking
-        if self.networking_metrics == 'True':
+        if self.networking_metrics:
             #* initialize variable for API client configuration
             api_client_configuration = ntnx_networking_py_client.Configuration()
             api_client_configuration.host = self.prism
