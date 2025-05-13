@@ -60,7 +60,8 @@ class NutanixMetrics:
     def __init__(self,
                  app_port=9440, polling_interval_seconds=30, api_requests_timeout_seconds=30, api_requests_retries=5, api_sleep_seconds_between_retries=15,
                  prism='127.0.0.1', user='admin', pwd='Nutanix/4u', prism_secure=False,
-                 storage_containers_metrics='True',disks_metrics='False',vm_list=''):
+                 cluster_metrics='True', hosts_metrics='True', storage_containers_metrics='True',disks_metrics='False', networking_metrics='False', files_metrics='False', object_metrics='False', volumes_metrics='False', ncm_ssp_metrics='False',
+                 vm_list=''):
         self.app_port = app_port
         self.polling_interval_seconds = polling_interval_seconds
         self.api_requests_timeout_seconds = api_requests_timeout_seconds
@@ -70,142 +71,156 @@ class NutanixMetrics:
         self.user = user
         self.pwd = pwd
         self.prism_secure = prism_secure
+        self.cluster_metrics = cluster_metrics
+        self.hosts_metrics = hosts_metrics
         self.storage_containers_metrics = storage_containers_metrics
         self.disks_metrics = disks_metrics
+        self.networking_metrics = networking_metrics
+        self.files_metrics = files_metrics
+        self.object_metrics = object_metrics
+        self.volumes_metrics = volumes_metrics
+        self.ncm_ssp_metrics = ncm_ssp_metrics
         self.vm_list = vm_list
 
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [INFO] Initializing v4 API metrics...{PrintColors.RESET}")
         stats_count = 0
         
         #region #?clusters
-        #* processing classes in clustermgmt
-        ntnx_clustermgmt_py_client_stats = ['HostStats','ClusterStats']
-        if self.storage_containers_metrics:
-            ntnx_clustermgmt_py_client_stats.append('StorageContainerStats')
-        if self.disks_metrics:
-            ntnx_clustermgmt_py_client_stats.append('DiskStats')
-        for class_name in ntnx_clustermgmt_py_client_stats:
-            class_ = getattr(ntnx_clustermgmt_py_client, class_name)
-            stats = class_()
-            stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
-            instance_type = inflection.underscore(class_name.replace("Stats", ""))
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in stats_metrics:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_clustermgmt_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(stats_metrics)
-            #print(f"{class_name}: {stats_metrics}")
+        if self.cluster_metrics == 'True':
+            #* processing classes in clustermgmt
+            ntnx_clustermgmt_py_client_stats = ['HostStats','ClusterStats']
+            if self.storage_containers_metrics:
+                ntnx_clustermgmt_py_client_stats.append('StorageContainerStats')
+            if self.disks_metrics:
+                ntnx_clustermgmt_py_client_stats.append('DiskStats')
+            for class_name in ntnx_clustermgmt_py_client_stats:
+                class_ = getattr(ntnx_clustermgmt_py_client, class_name)
+                stats = class_()
+                stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
+                instance_type = inflection.underscore(class_name.replace("Stats", ""))
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
+                for stat in stats_metrics:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_clustermgmt_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(stats_metrics)
+                #print(f"{class_name}: {stats_metrics}")
         #endregion #?clusters
 
         #region #?networking
-        #* processing classes in networking
-        ntnx_networking_py_client_stats = ['Layer2StretchStats','LoadBalancerSessionStats','TrafficMirrorStats','VpcNsStats','VpnConnectionStats']
-        for class_name in ntnx_networking_py_client_stats:
-            class_ = getattr(ntnx_networking_py_client, class_name)
-            stats = class_()
-            stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
-            instance_type = inflection.underscore(class_name.replace("Stats", ""))
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in stats_metrics:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_networking_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(stats_metrics)
-            #print(f"{class_name}: {stats_metrics}")
+        if self.networking_metrics == 'True':
+            #* processing classes in networking
+            ntnx_networking_py_client_stats = ['Layer2StretchStats','LoadBalancerSessionStats','TrafficMirrorStats','VpcNsStats','VpnConnectionStats']
+            for class_name in ntnx_networking_py_client_stats:
+                class_ = getattr(ntnx_networking_py_client, class_name)
+                stats = class_()
+                stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
+                instance_type = inflection.underscore(class_name.replace("Stats", ""))
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
+                for stat in stats_metrics:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_networking_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(stats_metrics)
+                #print(f"{class_name}: {stats_metrics}")
         #endregion #?networking
 
         #region #?vmm
-        #* processing classes in vmm
-        ntnx_vmm_py_client_stats = ['AhvStatsVmStatsTuple','AhvStatsVmDiskStatsTuple','AhvStatsVmNicStatsTuple']
-        exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','cluster','hypervisor_type']
-        for class_name in ntnx_vmm_py_client_stats:
-            class_ = getattr(ntnx_vmm_py_client, class_name)
-            stats = class_()
-            stats_dictionary = stats.to_dict()
-            vmm_stats = []
-            for stat in stats_dictionary:
-                if stat not in exclude_list:
-                    vmm_stats.append(stat)
-            instance_type_name = class_name.replace("StatsTuple", "")
-            instance_type_name = instance_type_name.replace("AhvStats", "")
-            instance_type = inflection.underscore(instance_type_name)
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in vmm_stats:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_vmm_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(vmm_stats)
-            #print(f"{class_name}: {vmm_stats}")
+        if self.vm_list != '':
+            #* processing classes in vmm
+            ntnx_vmm_py_client_stats = ['AhvStatsVmStatsTuple','AhvStatsVmDiskStatsTuple','AhvStatsVmNicStatsTuple']
+            exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','cluster','hypervisor_type']
+            for class_name in ntnx_vmm_py_client_stats:
+                class_ = getattr(ntnx_vmm_py_client, class_name)
+                stats = class_()
+                stats_dictionary = stats.to_dict()
+                vmm_stats = []
+                for stat in stats_dictionary:
+                    if stat not in exclude_list:
+                        vmm_stats.append(stat)
+                instance_type_name = class_name.replace("StatsTuple", "")
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', instance_type_name).lower()
+                instance_type_name = instance_type_name.replace("AhvStats", "")
+                instance_type = inflection.underscore(instance_type_name)
+                #print(instance_type)
+                for stat in vmm_stats:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_vmm_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(vmm_stats)
+                #print(f"{class_name}: {vmm_stats}")
         #endregion #?vmm
 
         #region #?files
-        #* processing classes in files
-        ntnx_files_py_client_stats = ['AntivirusStats','FileServerStats','MountTargetStats']
-        for class_name in ntnx_files_py_client_stats:
-            class_ = getattr(ntnx_files_py_client, class_name)
-            stats = class_()
-            stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
-            instance_type = inflection.underscore(class_name.replace("Stats", ""))
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in stats_metrics:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_files_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(stats_metrics)
-            #print(f"{class_name}: {stats_metrics}")
+        if self.files_metrics == 'True':
+            #* processing classes in files
+            ntnx_files_py_client_stats = ['AntivirusStats','FileServerStats','MountTargetStats']
+            for class_name in ntnx_files_py_client_stats:
+                class_ = getattr(ntnx_files_py_client, class_name)
+                stats = class_()
+                stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
+                instance_type = inflection.underscore(class_name.replace("Stats", ""))
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
+                for stat in stats_metrics:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_files_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(stats_metrics)
+                #print(f"{class_name}: {stats_metrics}")
         #endregion #?files
         
-        #region #?objects
-        #* processing classes in objects
-        ntnx_objects_py_client_stats = ['ObjectstoreStats']
-        for class_name in ntnx_objects_py_client_stats:
-            class_ = getattr(ntnx_objects_py_client, class_name)
-            stats = class_()
-            stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
-            instance_type = inflection.underscore(class_name.replace("Stats", ""))
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in stats_metrics:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_objects_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(stats_metrics)
-            #print(f"{class_name}: {stats_metrics}")
-        #endregion #?objects
+        #region #?object
+        if self.object_metrics == 'True':
+            #* processing classes in objects
+            ntnx_objects_py_client_stats = ['ObjectstoreStats']
+            for class_name in ntnx_objects_py_client_stats:
+                class_ = getattr(ntnx_objects_py_client, class_name)
+                stats = class_()
+                stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
+                instance_type = inflection.underscore(class_name.replace("Stats", ""))
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
+                for stat in stats_metrics:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_objects_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(stats_metrics)
+                #print(f"{class_name}: {stats_metrics}")
+        #endregion #?object
         
         #region #?volumes
-        #* processing classes in volumes
-        ntnx_volumes_py_client_stats = ['VolumeDiskStats','VolumeGroupStats']
-        for class_name in ntnx_volumes_py_client_stats:
-            class_ = getattr(ntnx_volumes_py_client, class_name)
-            stats = class_()
-            stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
-            instance_type = inflection.underscore(class_name.replace("Stats", ""))
-            class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
-            for stat in stats_metrics:
-                #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
-                key_string = f"nutanix_volumes_{class_snake_case_name}_{stat}"
-                key_string = key_string.replace(".","_")
-                key_string = key_string.replace("-","_")
-                setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
-                #print(f"Adding {instance_type}:{key_string}")
-            stats_count += len(stats_metrics)
-            #print(f"{class_name}: {stats_metrics}")
+        if self.volumes_metrics == 'True':
+            #* processing classes in volumes
+            ntnx_volumes_py_client_stats = ['VolumeDiskStats','VolumeGroupStats']
+            for class_name in ntnx_volumes_py_client_stats:
+                class_ = getattr(ntnx_volumes_py_client, class_name)
+                stats = class_()
+                stats_metrics = [stat[len(f"_{class_name}__"):] for stat in vars(stats) if stat.startswith(f"_{class_name}__")]
+                instance_type = inflection.underscore(class_name.replace("Stats", ""))
+                class_snake_case_name = re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower()
+                for stat in stats_metrics:
+                    #making sure we are compliant with the data model (https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels)
+                    key_string = f"nutanix_volumes_{class_snake_case_name}_{stat}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
+                    #print(f"Adding {instance_type}:{key_string}")
+                stats_count += len(stats_metrics)
+                #print(f"{class_name}: {stats_metrics}")
         #endregion #?volumes
 
         print(f"{PrintColors.DATA}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [DATA] Initialized {stats_count} metrics.{PrintColors.RESET}")
@@ -244,143 +259,146 @@ class NutanixMetrics:
             api_client_configuration.verify_ssl = False
 
         client = ntnx_clustermgmt_py_client.ApiClient(configuration=api_client_configuration)
-
+        
+        
         #region #?clusters
-        #* getting list of clusters
-        entity_api = ntnx_clustermgmt_py_client.ClustersApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Clusters...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_clusters(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(
-                        v4_get_entities,
-                        module=ntnx_clustermgmt_py_client,
-                        entity_api='ClustersApi',
-                        client=client,
-                        function='list_clusters',
-                        page=page_number,
-                        limit=limit
-                    ) for page_number in range(0, page_count, 1)]
-                for future in as_completed(futures):
-                    try:
-                        entities = future.result()
-                        entity_list.extend(entities.data)
-                    except Exception as e:
-                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                    finally:
-                        progress_bar.update(1)
-        cluster_list = entity_list
+        if self.cluster_metrics == 'True':
+            #* getting list of clusters
+            entity_api = ntnx_clustermgmt_py_client.ClustersApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Clusters...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_clusters(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_entities,
+                            module=ntnx_clustermgmt_py_client,
+                            entity_api='ClustersApi',
+                            client=client,
+                            function='list_clusters',
+                            page=page_number,
+                            limit=limit
+                        ) for page_number in range(0, page_count, 1)]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            entity_list.extend(entities.data)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            cluster_list = entity_list
 
-        #* get metrics for each cluster
-        cluster_details_list = []
-        metrics=[]
-        for entity in cluster_list:
-            if 'PRISM_CENTRAL' in entity.config.cluster_function:
-                continue
-            entity_details = {
-                'entity_name': entity.name,
-                'entity_uuid': entity.ext_id,
-            }
-            cluster_details_list.append(entity_details)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(cluster_details_list)} entities...{PrintColors.RESET}")
-        with tqdm.tqdm(total=len(cluster_details_list), desc="Fetching cluster metrics") as progress_bar:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(
-                        v4_get_entity_stats,
-                        client=client,
-                        module=ntnx_clustermgmt_py_client,
-                        entity_api='ClustersApi',
-                        function='get_cluster_stats',
-                        entity=cluster,
-                        metric_key_prefix='nutanix_clustermgmt_cluster_stats_',
-                        sampling_interval=30,
-                        stat_type='LAST'
-                    ) for cluster in cluster_details_list]
-                for future in as_completed(futures):
-                    try:
-                        entities = future.result()
-                        metrics.extend(entities)
-                    except Exception as e:
-                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                    finally:
-                        progress_bar.update(1)
-        for metric in metrics:
-            #print(metric)
-            key, entity, value = metric.split(':')
-            #print(f"key: {key}, entity: {entity}, value: {value}")
-            self.__dict__[key].labels(cluster=entity).set(value)
+            #* get metrics for each cluster
+            cluster_details_list = []
+            metrics=[]
+            for entity in cluster_list:
+                if 'PRISM_CENTRAL' in entity.config.cluster_function:
+                    continue
+                entity_details = {
+                    'entity_name': entity.name,
+                    'entity_uuid': entity.ext_id,
+                }
+                cluster_details_list.append(entity_details)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(cluster_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(cluster_details_list), desc="Fetching cluster metrics") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_entity_stats,
+                            client=client,
+                            module=ntnx_clustermgmt_py_client,
+                            entity_api='ClustersApi',
+                            function='get_cluster_stats',
+                            entity=cluster,
+                            metric_key_prefix='nutanix_clustermgmt_cluster_stats_',
+                            sampling_interval=30,
+                            stat_type='LAST'
+                        ) for cluster in cluster_details_list]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            metrics.extend(entities)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            for metric in metrics:
+                #print(metric)
+                key, entity, value = metric.split(':')
+                #print(f"key: {key}, entity: {entity}, value: {value}")
+                self.__dict__[key].labels(cluster=entity).set(value)
         #endregion #?clusters
 
         #region #?hosts
-        #* getting list of hosts
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Hosts...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_hosts(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(
-                        v4_get_entities,
-                        module=ntnx_clustermgmt_py_client,
-                        entity_api='ClustersApi',
-                        client=client,
-                        function='list_hosts',
-                        page=page_number,
-                        limit=limit
-                    ) for page_number in range(0, page_count, 1)]
-                for future in as_completed(futures):
-                    try:
-                        entities = future.result()
-                        entity_list.extend(entities.data)
-                    except Exception as e:
-                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                    finally:
-                        progress_bar.update(1)
-        host_list = entity_list
+        if self.hosts_metrics == 'True':
+            #* getting list of hosts
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Hosts...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_hosts(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_entities,
+                            module=ntnx_clustermgmt_py_client,
+                            entity_api='ClustersApi',
+                            client=client,
+                            function='list_hosts',
+                            page=page_number,
+                            limit=limit
+                        ) for page_number in range(0, page_count, 1)]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            entity_list.extend(entities.data)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            host_list = entity_list
 
-        #* get metrics for each cluster
-        host_details_list = []
-        metrics=[]
-        for entity in host_list:
-            entity_details = {
-                'entity_name': entity.host_name,
-                'entity_uuid': entity.ext_id,
-                'entity_parent_uuid': entity.cluster.uuid,
-            }
-            #print(entity_details)
-            host_details_list.append(entity_details)
-        #print(host_details_list)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(host_details_list)} entities...{PrintColors.RESET}")
-        with tqdm.tqdm(total=len(host_details_list), desc="Fetching hosts metrics") as progress_bar:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(
-                        v4_get_entity_stats,
-                        client=client,
-                        module=ntnx_clustermgmt_py_client,
-                        entity_api='ClustersApi',
-                        function='get_host_stats',
-                        entity=host,
-                        metric_key_prefix='nutanix_clustermgmt_host_stats_',
-                        sampling_interval=30,
-                        stat_type='LAST'
-                    ) for host in host_details_list]
-                for future in as_completed(futures):
-                    try:
-                        entities = future.result()
-                        metrics.extend(entities)
-                    except Exception as e:
-                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                    finally:
-                        progress_bar.update(1)
-        for metric in metrics:
-            #print(metric)
-            key, entity, value = metric.split(':')
-            #print(f"key: {key}, entity: {entity}, value: {value}")
-            self.__dict__[key].labels(host=entity).set(value)
+            #* get metrics for each cluster
+            host_details_list = []
+            metrics=[]
+            for entity in host_list:
+                entity_details = {
+                    'entity_name': entity.host_name,
+                    'entity_uuid': entity.ext_id,
+                    'entity_parent_uuid': entity.cluster.uuid,
+                }
+                #print(entity_details)
+                host_details_list.append(entity_details)
+            #print(host_details_list)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(host_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(host_details_list), desc="Fetching hosts metrics") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_entity_stats,
+                            client=client,
+                            module=ntnx_clustermgmt_py_client,
+                            entity_api='ClustersApi',
+                            function='get_host_stats',
+                            entity=host,
+                            metric_key_prefix='nutanix_clustermgmt_host_stats_',
+                            sampling_interval=30,
+                            stat_type='LAST'
+                        ) for host in host_details_list]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            metrics.extend(entities)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            for metric in metrics:
+                #print(metric)
+                key, entity, value = metric.split(':')
+                #print(f"key: {key}, entity: {entity}, value: {value}")
+                self.__dict__[key].labels(host=entity).set(value)
         #endregion #?hosts
 
         #region #?storage_containers
@@ -524,319 +542,406 @@ class NutanixMetrics:
         
         #endregion #?clustermgmt
 
-        
+
         #region #?networking
-        #* initialize variable for API client configuration
-        api_client_configuration = ntnx_networking_py_client.Configuration()
-        api_client_configuration.host = self.prism
-        api_client_configuration.username = self.user
-        api_client_configuration.password = self.pwd
+        if self.networking_metrics == 'True':
+            #* initialize variable for API client configuration
+            api_client_configuration = ntnx_networking_py_client.Configuration()
+            api_client_configuration.host = self.prism
+            api_client_configuration.username = self.user
+            api_client_configuration.password = self.pwd
 
-        if self.prism_secure is False:
-            #! suppress warnings about insecure connections
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            #! suppress ssl certs verification
-            api_client_configuration.verify_ssl = False
+            if self.prism_secure is False:
+                #! suppress warnings about insecure connections
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                #! suppress ssl certs verification
+                api_client_configuration.verify_ssl = False
 
-        client = ntnx_networking_py_client.ApiClient(configuration=api_client_configuration)
-        
-        #region #?layer2 stretch
-        #* getting list of Layer 2 stretch
-        entity_api = ntnx_networking_py_client.Layer2StretchesApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Layer 2 Stretch Networks...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_layer2_stretches(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        if page_count > 0:
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entities,
-                            module=ntnx_clustermgmt_py_client,
-                            entity_api='Layer2StretchesApi',
-                            client=client,
-                            function='list_layer2_stretches',
-                            page=page_number,
-                            limit=limit
-                        ) for page_number in range(0, page_count, 1)]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            entity_list.extend(entities.data)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            layer2_stretch_list = entity_list
+            client = ntnx_networking_py_client.ApiClient(configuration=api_client_configuration)
             
+            #region #?layer2 stretch
+            #* getting list of Layer 2 stretch
+            entity_api = ntnx_networking_py_client.Layer2StretchesApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Layer 2 Stretch Networks...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_layer2_stretches(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_clustermgmt_py_client,
+                                entity_api='Layer2StretchesApi',
+                                client=client,
+                                function='list_layer2_stretches',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                layer2_stretch_list = entity_list
+                
 
-            #* get metrics for each layer2 stretch
-            layer2_stretch_details_list = []
-            metrics=[]
-            for entity in layer2_stretch_list:
-                entity_details = {
-                    'entity_name': entity.name,
-                    'entity_uuid': entity.ext_id,
-                }
-                layer2_stretch_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(layer2_stretch_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(layer2_stretch_details_list), desc="Fetching layer2 stretch metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=client,
-                            module=ntnx_networking_py_client,
-                            entity_api='Layer2StretchesStatsApi',
-                            function='get_layer2_stretch_stats',
-                            entity=layer2stretch,
-                            metric_key_prefix='nutanix_networking_layer2_stretch_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for layer2stretch in layer2_stretch_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(layer2_stretch=entity).set(value)
-        #endregion #?layer2 stretch
-        
-        #region #?load balancer sessions
-        #* getting list of load balancer sessions
-        entity_api = ntnx_networking_py_client.LoadBalancerSessionsApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Load Balancer Sessions...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_load_balancer_sessions(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        if page_count > 0:
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entities,
-                            module=ntnx_networking_py_client,
-                            entity_api='LoadBalancerSessionsApi',
-                            client=client,
-                            function='list_load_balancer_sessions',
-                            page=page_number,
-                            limit=limit
-                        ) for page_number in range(0, page_count, 1)]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            entity_list.extend(entities.data)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            load_balancer_sessions_list = entity_list
-            
-
-            #* get metrics for each load balancer sessions
-            load_balancer_sessions_details_list = []
-            metrics=[]
-            for entity in load_balancer_sessions_list:
-                entity_details = {
-                    'entity_name': entity.name,
-                    'entity_uuid': entity.ext_id,
-                }
-                load_balancer_sessions_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(load_balancer_sessions_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(load_balancer_sessions_details_list), desc="Fetching load balancer sessions metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=client,
-                            module=ntnx_networking_py_client,
-                            entity_api='LoadBalancerSessionStatsApi',
-                            function='get_load_balancer_session_stats',
-                            entity=session,
-                            metric_key_prefix='nutanix_networking_load_balancer_session_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for session in load_balancer_sessions_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            #print(metrics)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(load_balancer_session=entity).set(value)
-        #endregion #?load balancer sessions
-        
-        #region #?traffic mirror
-        #* getting list of load balancer sessions
-        entity_api = ntnx_networking_py_client.TrafficMirrorsApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Traffic Mirror...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_traffic_mirrors(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        if page_count > 0:
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entities,
-                            module=ntnx_networking_py_client,
-                            entity_api='TrafficMirrorsApi',
-                            client=client,
-                            function='list_traffic_mirrors',
-                            page=page_number,
-                            limit=limit
-                        ) for page_number in range(0, page_count, 1)]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            entity_list.extend(entities.data)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            traffic_mirrors_list = entity_list
-            
-
-            #* get metrics for each load balancer sessions
-            traffic_mirrors_details_list = []
-            metrics=[]
-            for entity in traffic_mirrors_list:
-                entity_details = {
-                    'entity_name': entity.name,
-                    'entity_uuid': entity.ext_id,
-                }
-                traffic_mirrors_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(traffic_mirrors_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(traffic_mirrors_details_list), desc="Fetching traffic mirrors metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=client,
-                            module=ntnx_networking_py_client,
-                            entity_api='TrafficMirrorStatsApi',
-                            function='get_traffic_mirror_stats',
-                            entity=mirror,
-                            metric_key_prefix='nutanix_networking_traffic_mirror_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for mirror in traffic_mirrors_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(traffic_mirror=entity).set(value)
-        #endregion #?traffic mirror
-        
-        #region #?vpc external subnets
-        #* getting list of vpc external subnets
-        entity_api = ntnx_networking_py_client.VpcsApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPC External Subnets...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_vpcs(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        if page_count > 0:
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entities,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpcsApi',
-                            client=client,
-                            function='list_vpcs',
-                            page=page_number,
-                            limit=limit
-                        ) for page_number in range(0, page_count, 1)]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            entity_list.extend(entities.data)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            vpc_list = entity_list
-            
-
-            #* get metrics for each vpc external subnets
-            vpc_external_network_details_list = []
-            metrics=[]
-            for entity in vpc_list:
-                for external_subnet in entity.external_subnets:
+                #* get metrics for each layer2 stretch
+                layer2_stretch_details_list = []
+                metrics=[]
+                for entity in layer2_stretch_list:
                     entity_details = {
                         'entity_name': entity.name,
-                        'entity_uuid': external_subnet.subnet_reference,
-                        'entity_parent_uuid': entity.ext_id,
+                        'entity_uuid': entity.ext_id,
                     }
-                    vpc_external_network_details_list.append(entity_details)
-            #print(vpc_external_network_details_list)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpc_external_network_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(vpc_external_network_details_list), desc="Fetching VPC External Subnets North/South traffic metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=client,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpcNsStatsApi',
-                            function='get_vpc_ns_stats',
-                            entity=subnet,
-                            metric_key_prefix='nutanix_networking_vpc_ns_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for subnet in vpc_external_network_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(vpc_ns=entity).set(value)
-        #endregion #?vpc external subnets
+                    layer2_stretch_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(layer2_stretch_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(layer2_stretch_details_list), desc="Fetching layer2 stretch metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_networking_py_client,
+                                entity_api='Layer2StretchesStatsApi',
+                                function='get_layer2_stretch_stats',
+                                entity=layer2stretch,
+                                metric_key_prefix='nutanix_networking_layer2_stretch_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for layer2stretch in layer2_stretch_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(layer2_stretch=entity).set(value)
+            #endregion #?layer2 stretch
+            
+            #region #?load balancer sessions
+            #* getting list of load balancer sessions
+            entity_api = ntnx_networking_py_client.LoadBalancerSessionsApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Load Balancer Sessions...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_load_balancer_sessions(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_networking_py_client,
+                                entity_api='LoadBalancerSessionsApi',
+                                client=client,
+                                function='list_load_balancer_sessions',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                load_balancer_sessions_list = entity_list
+                
+
+                #* get metrics for each load balancer sessions
+                load_balancer_sessions_details_list = []
+                metrics=[]
+                for entity in load_balancer_sessions_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    load_balancer_sessions_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(load_balancer_sessions_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(load_balancer_sessions_details_list), desc="Fetching load balancer sessions metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_networking_py_client,
+                                entity_api='LoadBalancerSessionStatsApi',
+                                function='get_load_balancer_session_stats',
+                                entity=session,
+                                metric_key_prefix='nutanix_networking_load_balancer_session_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for session in load_balancer_sessions_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                #print(metrics)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(load_balancer_session=entity).set(value)
+            #endregion #?load balancer sessions
+            
+            #region #?traffic mirror
+            #* getting list of load balancer sessions
+            entity_api = ntnx_networking_py_client.TrafficMirrorsApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Traffic Mirror...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_traffic_mirrors(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_networking_py_client,
+                                entity_api='TrafficMirrorsApi',
+                                client=client,
+                                function='list_traffic_mirrors',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                traffic_mirrors_list = entity_list
+                
+
+                #* get metrics for each load balancer sessions
+                traffic_mirrors_details_list = []
+                metrics=[]
+                for entity in traffic_mirrors_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    traffic_mirrors_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(traffic_mirrors_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(traffic_mirrors_details_list), desc="Fetching traffic mirrors metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_networking_py_client,
+                                entity_api='TrafficMirrorStatsApi',
+                                function='get_traffic_mirror_stats',
+                                entity=mirror,
+                                metric_key_prefix='nutanix_networking_traffic_mirror_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for mirror in traffic_mirrors_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(traffic_mirror=entity).set(value)
+            #endregion #?traffic mirror
+            
+            #region #?vpc external subnets
+            #* getting list of vpc external subnets
+            entity_api = ntnx_networking_py_client.VpcsApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPC External Subnets...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_vpcs(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpcsApi',
+                                client=client,
+                                function='list_vpcs',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                vpc_list = entity_list
+                
+
+                #* get metrics for each vpc external subnets
+                vpc_external_network_details_list = []
+                metrics=[]
+                for entity in vpc_list:
+                    for external_subnet in entity.external_subnets:
+                        entity_details = {
+                            'entity_name': entity.name,
+                            'entity_uuid': external_subnet.subnet_reference,
+                            'entity_parent_uuid': entity.ext_id,
+                        }
+                        vpc_external_network_details_list.append(entity_details)
+                #print(vpc_external_network_details_list)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpc_external_network_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(vpc_external_network_details_list), desc="Fetching VPC External Subnets North/South traffic metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpcNsStatsApi',
+                                function='get_vpc_ns_stats',
+                                entity=subnet,
+                                metric_key_prefix='nutanix_networking_vpc_ns_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for subnet in vpc_external_network_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(vpc_ns=entity).set(value)
+            #endregion #?vpc external subnets
+            
+            #region #?vpn connections
+            #* getting list of vpn connections
+            entity_api = ntnx_networking_py_client.VpnConnectionsApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPN Connections...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_vpn_connections(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpnConnectionsApi',
+                                client=client,
+                                function='list_vpn_connections',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                vpn_connection_list = entity_list
+                
+
+                #* get metrics for each vpn connection
+                vpn_connection_details_list = []
+                metrics=[]
+                for entity in vpn_connection_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    vpn_connection_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpn_connection_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(vpn_connection_details_list), desc="Fetching VPN Connections metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpnConnectionStatsApi',
+                                function='get_vpn_connection_stats',
+                                entity=connection,
+                                metric_key_prefix='nutanix_networking_vpn_connection_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for connection in vpn_connection_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(vpn_connection=entity).set(value)
+            #endregion #?vpn connections
         
-        #region #?vpn connections
-        #* getting list of vpn connections
-        entity_api = ntnx_networking_py_client.VpnConnectionsApi(api_client=client)
-        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPN Connections...{PrintColors.RESET}")
-        entity_list=[]
-        response = entity_api.list_vpn_connections(_page=0,_limit=1)
-        total_available_results=response.metadata.total_available_results
-        page_count = math.ceil(total_available_results/limit)
-        if page_count > 0:
+        #endregion #?networking
+
+
+        #region #?vmm
+        if self.vm_list != '':
+            #* initialize variable for API client configuration
+            api_client_configuration = ntnx_vmm_py_client.Configuration()
+            api_client_configuration.host = self.prism
+            api_client_configuration.username = self.user
+            api_client_configuration.password = self.pwd
+
+            if self.prism_secure is False:
+                #! suppress warnings about insecure connections
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                #! suppress ssl certs verification
+                api_client_configuration.verify_ssl = False
+
+            client = ntnx_vmm_py_client.ApiClient(configuration=api_client_configuration)
+
+            #* getting list of vms
+            entity_api = ntnx_vmm_py_client.VmApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VMs...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_vms(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            page_count = math.ceil(total_available_results/limit)
             with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpnConnectionsApi',
+                            module=ntnx_vmm_py_client,
+                            entity_api='VmApi',
                             client=client,
-                            function='list_vpn_connections',
+                            function='list_vms',
                             page=page_number,
                             limit=limit
                         ) for page_number in range(0, page_count, 1)]
@@ -848,48 +953,64 @@ class NutanixMetrics:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
-            vpn_connection_list = entity_list
-            
+            vms_list = entity_list
 
-            #* get metrics for each vpn connection
-            vpn_connection_details_list = []
-            metrics=[]
-            for entity in vpn_connection_list:
-                entity_details = {
-                    'entity_name': entity.name,
-                    'entity_uuid': entity.ext_id,
-                }
-                vpn_connection_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpn_connection_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(vpn_connection_details_list), desc="Fetching VPN Connections metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=client,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpnConnectionStatsApi',
-                            function='get_vpn_connection_stats',
-                            entity=connection,
-                            metric_key_prefix='nutanix_networking_vpn_connection_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for connection in vpn_connection_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(vpn_connection=entity).set(value)
-        #endregion #?vpn connections
-        
-        #endregion #?networking
+            if (self.vm_list).lower() == 'all':
+                pass
+            else:
+                vm_list_array = self.vm_list.split(',')
+                
+                #* get metrics for each vm
+                vm_details_list = []
+                metrics=[]
+                for entity in vm_list_array:
+                    entity_details = {
+                        'entity_name': entity,
+                        'entity_uuid': next(iter([item.ext_id for item in vms_list if item.name == entity])),
+                    }
+                    vm_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vm_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(vm_details_list), desc="Fetching vm metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_vmm_py_client,
+                                entity_api='StatsApi',
+                                function='get_vm_stats_by_id',
+                                entity=vm,
+                                metric_key_prefix='nutanix_vmm_ahv_stats_vm_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for vm in vm_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(vm=entity).set(value)
+        #endregion #?vmm
+
+
+        #region #?files
+        #endregion #?files
+
+
+        #region #?objects
+        #endregion #?objects
+
+
+        #region #?volumes
+        #endregion #?volumes
+
+
 class NutanixMetricsLegacy:
     """
     Representation of Prometheus metrics and loop to fetch and transform
@@ -2259,33 +2380,52 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
         response = get_stats_function(entity['entity_parent_uuid'],extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type, _select='*')
     else:
         response = get_stats_function(extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type, _select='*')
-    metrics = response.data.to_dict()
+    #print(type(response.data))
+    #print(response.data)
+    if metric_key_prefix == 'nutanix_vmm_ahv_stats_vm_':
+        metrics = response.data.stats
+    else:
+        metrics = response.data.to_dict()
 
     #print(metrics)
-    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type']
+    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
     lb_stats = ['listener_stats','target_stats']
     metrics_list = []
     #print(metrics)
-    for metric in metrics:
-        #print(metric)
-        if metric is not None:
-            if metric not in exclude_list:
-                if metric in lb_stats:
-                    #todo: add correct processing for load balancer stats here
-                    pass
-                else:
-                    metric_data = metrics.get(metric)
-                    if metric_data is not None:
-                        key_string = f"{metric_key_prefix}{metric}"
-                        key_string = key_string.replace(".","_")
-                        key_string = key_string.replace("-","_")
-                        if metric_key_prefix == 'nutanix_networking_vpc_ns_stats_':
-                            metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]}"
-                        else:
-                            metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]['value']}"
-                        metrics_list.append(metric_to_return)
-                        #print(f"{entity['entity_name']}:{key_string}:{metric_data[0]['value']}")
-                        #self.__dict__[key_string].labels(host=entity['entity_name']).set(metric_data[0]['value'])
+    if metric_key_prefix == 'nutanix_vmm_ahv_stats_vm_':
+        for metric_tuple in metrics:
+            metric_list = metric_tuple.to_dict()
+            for metric in metric_list:
+                if metric is not None:
+                    if metric not in exclude_list:
+                        metric_data = metric_list.get(metric)
+                        if metric_data is not None:
+                            key_string = f"{metric_key_prefix}{metric}"
+                            key_string = key_string.replace(".","_")
+                            key_string = key_string.replace("-","_")
+                            metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data}"
+                            metrics_list.append(metric_to_return)
+    else:
+        for metric in metrics:
+            #print(metric)
+            if metric is not None:
+                if metric not in exclude_list:
+                    if metric in lb_stats:
+                        #todo: add correct processing for load balancer stats here
+                        pass
+                    else:
+                        metric_data = metrics.get(metric)
+                        if metric_data is not None:
+                            key_string = f"{metric_key_prefix}{metric}"
+                            key_string = key_string.replace(".","_")
+                            key_string = key_string.replace("-","_")
+                            if metric_key_prefix == 'nutanix_networking_vpc_ns_stats_':
+                                metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]}"
+                            else:
+                                metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]['value']}"
+                            metrics_list.append(metric_to_return)
+                            #print(f"{entity['entity_name']}:{key_string}:{metric_data[0]['value']}")
+                            #self.__dict__[key_string].labels(host=entity['entity_name']).set(metric_data[0]['value'])
     return metrics_list
 
 
@@ -2329,6 +2469,36 @@ def main():
         prism_central_metrics = prism_central_metrics_env.lower() in ("true", "1", "t", "y", "yes")
     else:
         prism_central_metrics = False
+
+    networking_metrics_env = os.getenv('NETWORKING_METRICS',default='False')
+    if networking_metrics_env is not None:
+        networking_metrics = networking_metrics_env.lower() in ("true", "1", "t", "y", "yes")
+    else:
+        networking_metrics = False
+
+    files_metrics_env = os.getenv('FILES_METRICS',default='False')
+    if files_metrics_env is not None:
+        files_metrics = files_metrics_env.lower() in ("true", "1", "t", "y", "yes")
+    else:
+        files_metrics = False
+
+    object_metrics_env = os.getenv('OBJECT_METRICS',default='False')
+    if object_metrics_env is not None:
+        object_metrics = object_metrics_env.lower() in ("true", "1", "t", "y", "yes")
+    else:
+        object_metrics = False
+
+    volumes_metrics_env = os.getenv('VOLUMES_METRICS',default='False')
+    if volumes_metrics_env is not None:
+        volumes_metrics = volumes_metrics_env.lower() in ("true", "1", "t", "y", "yes")
+    else:
+        volumes_metrics = False
+
+    hosts_metrics_env = os.getenv('VOLUMES_METRICS',default='False')
+    if hosts_metrics_env is not None:
+        hosts_metrics = hosts_metrics_env.lower() in ("true", "1", "t", "y", "yes")
+    else:
+        hosts_metrics = False
 
     ncm_ssp_metrics_env = os.getenv('NCM_SSP_METRICS',default='False')
     if ncm_ssp_metrics_env is not None:
@@ -2398,8 +2568,7 @@ def main():
             user = os.getenv('PRISM_USERNAME'),
             pwd = os.getenv('PRISM_SECRET'),
             prism_secure=prism_secure,
-            storage_containers_metrics=storage_containers_metrics,
-            disks_metrics=disks_metrics,
+            cluster_metrics=cluster_metrics, hosts_metrics=hosts_metrics, storage_containers_metrics=storage_containers_metrics, disks_metrics=disks_metrics, networking_metrics=networking_metrics, files_metrics=files_metrics, object_metrics=object_metrics, volumes_metrics=volumes_metrics, ncm_ssp_metrics=ncm_ssp_metrics,
             vm_list=os.getenv('VM_LIST')
         )
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Starting http server on port {exporter_port}{PrintColors.RESET}")
