@@ -956,7 +956,50 @@ class NutanixMetrics:
             vms_list = entity_list
 
             if (self.vm_list).lower() == 'all':
-                pass
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VM stats...{PrintColors.RESET}")
+                start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
+                end_time = (datetime.now(timezone.utc)).isoformat()
+                entity_api = ntnx_vmm_py_client.StatsApi(api_client=client)
+                response = entity_api.list_vm_stats(_page=0,_limit=1,_startTime=start_time, _endTime=end_time, _samplingInterval=30, _statType='LAST', _select='*')
+                total_available_results=response.metadata.total_available_results
+                page_count = math.ceil(total_available_results/limit)
+                stats_list=[]
+                with tqdm.tqdm(total=page_count, desc="Fetching vm stats pages") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_all_vm_stats,
+                                client=client,
+                                page=page_number,
+                                limit=limit,
+                                start_time=start_time,
+                                end_time=end_time,
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                stats = future.result()
+                                stats_list.extend(stats)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                vm_stats_list = stats_list
+                exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
+                for vm_stat in vm_stats_list:
+                    vm_name = [vm.name for vm in vms_list if vm.ext_id == vm_stat.ext_id]
+                    if vm_name:
+                        for vm_stats_tuple in vm_stat.stats:
+                            stats = vm_stats_tuple.to_dict()
+                            for metric in stats:
+                                if metric is not None:
+                                    if metric not in exclude_list:
+                                        metric_data = stats.get(metric)
+                                        if metric_data is not None:
+                                            key_string = f"nutanix_vmm_ahv_stats_vm_{metric}"
+                                            key_string = key_string.replace(".","_")
+                                            key_string = key_string.replace("-","_")
+                                            self.__dict__[key_string].labels(vm=vm_name).set(metric_data)
             else:
                 vm_list_array = self.vm_list.split(',')
                 
@@ -2359,7 +2402,7 @@ def v4_get_entities(client,module,entity_api,function,page,limit=50):
 
 def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_prefix,sampling_interval,stat_type):
     '''v4_get_entity_stats function.
-       Fetches metrics for a specified vm and generates graphs for that entity.
+       Fetches metrics for a specified entity.
         Args:
             client: a v4 Python SDK client object.
             entity: an entity uuid/ext_id
@@ -2427,6 +2470,25 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
                             #print(f"{entity['entity_name']}:{key_string}:{metric_data[0]['value']}")
                             #self.__dict__[key_string].labels(host=entity['entity_name']).set(metric_data[0]['value'])
     return metrics_list
+
+
+def v4_get_all_vm_stats(client,start_time,end_time,sampling_interval,stat_type,page,limit='50'):
+    '''v4_get_all_vm_stats function.
+       Fetches metrics for all vms.
+        Args:
+            client: a v4 Python SDK client object.
+            entity: an entity uuid/ext_id
+            minutes_ago: integer indicating the number of minutes to get metrics for (exp: 60 would mean get the metrics for the last hour).
+            sampling_interval: integer used to specify in seconds the sampling interval.
+            stat_type: The operator to use while performing down-sampling on stats data. Allowed values are SUM, MIN, MAX, AVG, COUNT and LAST.
+        Returns:
+    '''
+
+    #* fetch metrics for all vms
+    entity_api = ntnx_vmm_py_client.StatsApi(api_client=client)
+    response = entity_api.list_vm_stats(_page=page, _limit=limit, _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type, _select='*')
+    metrics = response.data
+    return metrics
 
 
 def main():
