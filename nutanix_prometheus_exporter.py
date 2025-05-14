@@ -84,11 +84,13 @@ class NutanixMetrics:
 
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [INFO] Initializing v4 API metrics...{PrintColors.RESET}")
         stats_count = 0
+        complete_stats_list = {}
         
         #region #?clusters
         if self.cluster_metrics:
             #* processing classes in clustermgmt
             ntnx_clustermgmt_py_client_stats = ['HostStats','ClusterStats']
+            complete_stats_list.update({'clustermgmt': {}})
             if self.storage_containers_metrics:
                 ntnx_clustermgmt_py_client_stats.append('StorageContainerStats')
             if self.disks_metrics:
@@ -107,6 +109,8 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(stats_metrics)
+                complete_stats_list['clustermgmt'].update({instance_type: []})
+                complete_stats_list['clustermgmt'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
         #endregion #?clusters
 
@@ -114,6 +118,7 @@ class NutanixMetrics:
         if self.networking_metrics:
             #* processing classes in networking
             ntnx_networking_py_client_stats = ['Layer2StretchStats','LoadBalancerSessionStats','TrafficMirrorStats','VpcNsStats','VpnConnectionStats']
+            complete_stats_list.update({'networking': {}})
             for class_name in ntnx_networking_py_client_stats:
                 class_ = getattr(ntnx_networking_py_client, class_name)
                 stats = class_()
@@ -128,6 +133,8 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(stats_metrics)
+                complete_stats_list['networking'].update({instance_type: []})
+                complete_stats_list['networking'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
         #endregion #?networking
 
@@ -135,6 +142,7 @@ class NutanixMetrics:
         if self.vm_list != '':
             #* processing classes in vmm
             ntnx_vmm_py_client_stats = ['AhvStatsVmStatsTuple','AhvStatsVmDiskStatsTuple','AhvStatsVmNicStatsTuple']
+            complete_stats_list.update({'vmm': {}})
             exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','cluster','hypervisor_type']
             for class_name in ntnx_vmm_py_client_stats:
                 class_ = getattr(ntnx_vmm_py_client, class_name)
@@ -157,6 +165,8 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(vmm_stats)
+                complete_stats_list['vmm'].update({instance_type: []})
+                complete_stats_list['vmm'][instance_type].append(vmm_stats)
                 #print(f"{class_name}: {vmm_stats}")
         #endregion #?vmm
 
@@ -164,6 +174,7 @@ class NutanixMetrics:
         if self.files_metrics:
             #* processing classes in files
             ntnx_files_py_client_stats = ['AntivirusStats','FileServerStats','MountTargetStats']
+            complete_stats_list.update({'files': {}})
             for class_name in ntnx_files_py_client_stats:
                 class_ = getattr(ntnx_files_py_client, class_name)
                 stats = class_()
@@ -178,6 +189,8 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(stats_metrics)
+                complete_stats_list['files'].update({instance_type: []})
+                complete_stats_list['files'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
         #endregion #?files
         
@@ -185,6 +198,7 @@ class NutanixMetrics:
         if self.object_metrics:
             #* processing classes in objects
             ntnx_objects_py_client_stats = ['ObjectstoreStats']
+            complete_stats_list.update({'object': {}})
             for class_name in ntnx_objects_py_client_stats:
                 class_ = getattr(ntnx_objects_py_client, class_name)
                 stats = class_()
@@ -199,6 +213,8 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(stats_metrics)
+                complete_stats_list['object'].update({instance_type: []})
+                complete_stats_list['object'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
         #endregion #?object
         
@@ -206,6 +222,7 @@ class NutanixMetrics:
         if self.volumes_metrics:
             #* processing classes in volumes
             ntnx_volumes_py_client_stats = ['VolumeDiskStats','VolumeGroupStats']
+            complete_stats_list.update({'volumes': {}})
             for class_name in ntnx_volumes_py_client_stats:
                 class_ = getattr(ntnx_volumes_py_client, class_name)
                 stats = class_()
@@ -220,10 +237,13 @@ class NutanixMetrics:
                     setattr(self, key_string, Gauge(key_string, key_string, [instance_type]))
                     #print(f"Adding {instance_type}:{key_string}")
                 stats_count += len(stats_metrics)
+                complete_stats_list['volumes'].update({instance_type: []})
+                complete_stats_list['volumes'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
         #endregion #?volumes
 
         print(f"{PrintColors.DATA}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [DATA] Initialized {stats_count} metrics.{PrintColors.RESET}")
+        #print(json.dumps(complete_stats_list, indent=4))
         
         #todo: add entity count metrics
 
@@ -270,7 +290,7 @@ class NutanixMetrics:
             response = entity_api.list_clusters(_page=0,_limit=1)
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with tqdm.tqdm(total=page_count, desc="Fetching pages of cluster entities") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
@@ -339,7 +359,7 @@ class NutanixMetrics:
             response = entity_api.list_hosts(_page=0,_limit=1)
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with tqdm.tqdm(total=page_count, desc="Fetching pages of hosts entities") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
@@ -409,7 +429,7 @@ class NutanixMetrics:
             response = entity_api.list_storage_containers(_page=0,_limit=1)
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with tqdm.tqdm(total=page_count, desc="Fetching pages of storage container entities") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
@@ -481,7 +501,7 @@ class NutanixMetrics:
             response = entity_api.list_disks(_page=0,_limit=1)
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with tqdm.tqdm(total=page_count, desc="Fetching pages of disk entities") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
@@ -568,7 +588,7 @@ class NutanixMetrics:
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
             if page_count > 0:
-                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of layer2 stretch entities") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entities,
@@ -637,7 +657,7 @@ class NutanixMetrics:
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
             if page_count > 0:
-                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of load balancer session entities") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entities,
@@ -707,7 +727,7 @@ class NutanixMetrics:
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
             if page_count > 0:
-                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of traffic mirror entities") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entities,
@@ -776,7 +796,7 @@ class NutanixMetrics:
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
             if page_count > 0:
-                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of VPCs") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entities,
@@ -848,7 +868,7 @@ class NutanixMetrics:
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
             if page_count > 0:
-                with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of VPN connection entities") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entities,
@@ -934,7 +954,7 @@ class NutanixMetrics:
             response = entity_api.list_vms(_page=0,_limit=1)
             total_available_results=response.metadata.total_available_results
             page_count = math.ceil(total_available_results/limit)
-            with tqdm.tqdm(total=page_count, desc="Fetching entity pages") as progress_bar:
+            with tqdm.tqdm(total=page_count, desc="Fetching pages of VMs") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
