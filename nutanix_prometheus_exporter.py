@@ -88,6 +88,7 @@ class NutanixMetrics:
         
         #region #?clusters
         if self.cluster_metrics:
+            #region stats
             #* processing classes in clustermgmt
             ntnx_clustermgmt_py_client_stats = ['HostStats','ClusterStats']
             complete_stats_list.update({'clustermgmt': {}})
@@ -112,10 +113,12 @@ class NutanixMetrics:
                 complete_stats_list['clustermgmt'].update({instance_type: []})
                 complete_stats_list['clustermgmt'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
+            #endregion stats
         #endregion #?clusters
 
         #region #?networking
         if self.networking_metrics:
+            #region stats
             #* processing classes in networking
             ntnx_networking_py_client_stats = ['Layer2StretchStats','LoadBalancerSessionStats','TrafficMirrorStats','VpcNsStats','VpnConnectionStats']
             complete_stats_list.update({'networking': {}})
@@ -136,10 +139,12 @@ class NutanixMetrics:
                 complete_stats_list['networking'].update({instance_type: []})
                 complete_stats_list['networking'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
+            #endregion stats
         #endregion #?networking
 
         #region #?vmm
         if self.vm_list != '':
+            #region stats
             #* processing classes in vmm
             ntnx_vmm_py_client_stats = ['AhvStatsVmStatsTuple','AhvStatsVmDiskStatsTuple','AhvStatsVmNicStatsTuple']
             complete_stats_list.update({'vmm': {}})
@@ -168,10 +173,12 @@ class NutanixMetrics:
                 complete_stats_list['vmm'].update({instance_type: []})
                 complete_stats_list['vmm'][instance_type].append(vmm_stats)
                 #print(f"{class_name}: {vmm_stats}")
+            #endregion stats
         #endregion #?vmm
 
         #region #?files
         if self.files_metrics:
+            #region stats
             #* processing classes in files
             ntnx_files_py_client_stats = ['AntivirusStats','FileServerStats','MountTargetStats']
             complete_stats_list.update({'files': {}})
@@ -192,10 +199,12 @@ class NutanixMetrics:
                 complete_stats_list['files'].update({instance_type: []})
                 complete_stats_list['files'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
+            #endregion stats
         #endregion #?files
         
         #region #?object
         if self.object_metrics:
+            #region stats
             #* processing classes in objects
             ntnx_objects_py_client_stats = ['ObjectstoreStats']
             complete_stats_list.update({'object': {}})
@@ -216,10 +225,12 @@ class NutanixMetrics:
                 complete_stats_list['object'].update({instance_type: []})
                 complete_stats_list['object'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
+            #endregion stats
         #endregion #?object
         
         #region #?volumes
         if self.volumes_metrics:
+            #region stats
             #* processing classes in volumes
             ntnx_volumes_py_client_stats = ['VolumeDiskStats','VolumeGroupStats']
             complete_stats_list.update({'volumes': {}})
@@ -240,6 +251,7 @@ class NutanixMetrics:
                 complete_stats_list['volumes'].update({instance_type: []})
                 complete_stats_list['volumes'][instance_type].append(stats_metrics)
                 #print(f"{class_name}: {stats_metrics}")
+            #endregion stats
         #endregion #?volumes
 
         print(f"{PrintColors.DATA}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [DATA] Initialized {stats_count} metrics.{PrintColors.RESET}")
@@ -283,6 +295,7 @@ class NutanixMetrics:
         
         #region #?clusters
         if self.cluster_metrics:
+            #region get entities
             #* getting list of clusters
             entity_api = ntnx_clustermgmt_py_client.ClustersApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Clusters...{PrintColors.RESET}")
@@ -310,7 +323,9 @@ class NutanixMetrics:
                         finally:
                             progress_bar.update(1)
             cluster_list = entity_list
+            #endregion get entities
 
+            #region stats
             #* get metrics for each cluster
             cluster_details_list = []
             metrics=[]
@@ -349,10 +364,12 @@ class NutanixMetrics:
                 key, entity, value = metric.split(':')
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(cluster=entity).set(value)
+            #endregion stats
         #endregion #?clusters
 
         #region #?hosts
         if self.hosts_metrics:
+            #region get entities
             #* getting list of hosts
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Hosts...{PrintColors.RESET}")
             entity_list=[]
@@ -379,7 +396,9 @@ class NutanixMetrics:
                         finally:
                             progress_bar.update(1)
             host_list = entity_list
+            #endregion get entities
 
+            #region stats
             #* get metrics for each cluster
             host_details_list = []
             metrics=[]
@@ -419,10 +438,12 @@ class NutanixMetrics:
                 key, entity, value = metric.split(':')
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(host=entity).set(value)
+            #endregion stats
         #endregion #?hosts
 
         #region #?storage_containers
         if self.storage_containers_metrics:
+            #region get entities
             entity_api = ntnx_clustermgmt_py_client.StorageContainersApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Storage Containers...{PrintColors.RESET}")
             entity_list=[]
@@ -449,7 +470,9 @@ class NutanixMetrics:
                         finally:
                             progress_bar.update(1)
             storage_container_list = entity_list
+            #endregion get entities
 
+            #region stats
             #* get metrics for each storage container
             storage_container_details_list = []
             metrics=[]
@@ -491,10 +514,12 @@ class NutanixMetrics:
                 entity = entity.replace(".","_")
                 entity = entity.replace("-","_")
                 self.__dict__[key].labels(storage_container=entity).set(value)
+            #endregion stats
         #endregion #?storage_containers
 
         #region #?disks
         if self.disks_metrics:
+            #region get entities
             entity_api = ntnx_clustermgmt_py_client.DisksApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Disks...{PrintColors.RESET}")
             entity_list=[]
@@ -521,7 +546,9 @@ class NutanixMetrics:
                         finally:
                             progress_bar.update(1)
             disk_list = entity_list
+            #endregion get entities
 
+            #region stats
             #* get metrics for each disk
             disk_details_list = []
             metrics=[]
@@ -558,6 +585,7 @@ class NutanixMetrics:
                 key, entity, value = metric.split(':')
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(disk=entity).set(value)
+            #endregion stats
         #endregion #?disks
         
         #endregion #?clustermgmt
@@ -580,6 +608,7 @@ class NutanixMetrics:
             client = ntnx_networking_py_client.ApiClient(configuration=api_client_configuration)
             
             #region #?layer2 stretch
+            #region get entities
             #* getting list of Layer 2 stretch
             entity_api = ntnx_networking_py_client.Layer2StretchesApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Layer 2 Stretch Networks...{PrintColors.RESET}")
@@ -608,8 +637,9 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 layer2_stretch_list = entity_list
+            #endregion get entities
                 
-
+                #region stats
                 #* get metrics for each layer2 stretch
                 layer2_stretch_details_list = []
                 metrics=[]
@@ -646,9 +676,11 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(layer2_stretch=entity).set(value)
+                #endregion stats
             #endregion #?layer2 stretch
             
             #region #?load balancer sessions
+            #region get entities
             #* getting list of load balancer sessions
             entity_api = ntnx_networking_py_client.LoadBalancerSessionsApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Load Balancer Sessions...{PrintColors.RESET}")
@@ -677,8 +709,9 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 load_balancer_sessions_list = entity_list
+            #endregion get entities
                 
-
+                #region stats
                 #* get metrics for each load balancer sessions
                 load_balancer_sessions_details_list = []
                 metrics=[]
@@ -716,9 +749,11 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(load_balancer_session=entity).set(value)
+                #endregion stats
             #endregion #?load balancer sessions
             
             #region #?traffic mirror
+            #region get entities
             #* getting list of load balancer sessions
             entity_api = ntnx_networking_py_client.TrafficMirrorsApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Traffic Mirror...{PrintColors.RESET}")
@@ -747,8 +782,9 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 traffic_mirrors_list = entity_list
+            #endregion get entities
                 
-
+                #region stats
                 #* get metrics for each load balancer sessions
                 traffic_mirrors_details_list = []
                 metrics=[]
@@ -785,9 +821,11 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(traffic_mirror=entity).set(value)
+                #endregion stats
             #endregion #?traffic mirror
             
             #region #?vpc external subnets
+            #region get entities
             #* getting list of vpc external subnets
             entity_api = ntnx_networking_py_client.VpcsApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPC External Subnets...{PrintColors.RESET}")
@@ -816,8 +854,9 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 vpc_list = entity_list
+            #endregion get entities
                 
-
+                #region stats
                 #* get metrics for each vpc external subnets
                 vpc_external_network_details_list = []
                 metrics=[]
@@ -857,9 +896,11 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(vpc_ns=entity).set(value)
+                #endregion stats
             #endregion #?vpc external subnets
             
             #region #?vpn connections
+            #region get entities
             #* getting list of vpn connections
             entity_api = ntnx_networking_py_client.VpnConnectionsApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VPN Connections...{PrintColors.RESET}")
@@ -888,8 +929,9 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 vpn_connection_list = entity_list
+            #endregion get entities
                 
-
+                #region stats
                 #* get metrics for each vpn connection
                 vpn_connection_details_list = []
                 metrics=[]
@@ -926,6 +968,7 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(vpn_connection=entity).set(value)
+                #endregion stats
             #endregion #?vpn connections
         
         #endregion #?networking
@@ -947,6 +990,7 @@ class NutanixMetrics:
 
             client = ntnx_vmm_py_client.ApiClient(configuration=api_client_configuration)
 
+            #region get entities
             #* getting list of vms
             entity_api = ntnx_vmm_py_client.VmApi(api_client=client)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VMs...{PrintColors.RESET}")
@@ -974,7 +1018,9 @@ class NutanixMetrics:
                         finally:
                             progress_bar.update(1)
             vms_list = entity_list
+            #endregion get entities
 
+            #region stats
             if (self.vm_list).lower() == 'all':
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VM stats...{PrintColors.RESET}")
                 start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
@@ -1059,6 +1105,7 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(vm=entity).set(value)
+            #endregion stats
         #endregion #?vmm
 
 
@@ -1107,9 +1154,10 @@ class NutanixMetrics:
                             finally:
                                 progress_bar.update(1)
                 files_server_list = entity_list
-                #endregion #?get files servers list
+            #endregion #?get files servers list
                 
                 #region #?antivirus stats
+                #region get entities
                 #* get metrics for each files antivirus server
                 antivirus_server_details_list = []
                 metrics=[]
@@ -1128,7 +1176,9 @@ class NutanixMetrics:
                             'entity_parent_uuid': entity.ext_id,
                         }
                         antivirus_server_details_list.append(entity_details)
+                #endregion get entities
                 
+                #region stats
                 if len(antivirus_server_details_list) > 0:
                     print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
                     
@@ -1160,9 +1210,11 @@ class NutanixMetrics:
                         entity = entity.replace(".","_")
                         entity = entity.replace("-","_")
                         self.__dict__[key].labels(antivirus=entity).set(value)
+                #endregion stats
                 #endregion #?antivirus stats
 
                 #region #?file_server stats
+                #region get entities
                 #* get metrics for each files antivirus server
                 files_server_details_list = []
                 metrics=[]
@@ -1172,6 +1224,9 @@ class NutanixMetrics:
                         'entity_uuid': entity.ext_id,
                     }
                     files_server_details_list.append(entity_details)
+                #endregion get entities
+                
+                #region stats
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
                 
                 with tqdm.tqdm(total=len(files_server_details_list), desc="Fetching Files Server metrics") as progress_bar:
@@ -1198,9 +1253,11 @@ class NutanixMetrics:
                     key, entity, value = metric.split(':')
                     #print(f"key: {key}, entity: {entity}, value: {value}")
                     self.__dict__[key].labels(file_server=entity).set(value)
+                #endregion stats
                 #endregion #?file_server stats
 
                 #region #?mount_target stats
+                #region get entities
                 #* get metrics for each mount target
                 mount_target_details_list = []
                 metrics=[]
@@ -1219,7 +1276,9 @@ class NutanixMetrics:
                             'entity_parent_uuid': entity.ext_id,
                         }
                         mount_target_details_list.append(entity_details)
-                
+                #endregion get entities
+
+                #region stats
                 if mount_target_details_list:
                     print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(mount_target_details_list)} entities...{PrintColors.RESET}")
                     
@@ -1251,6 +1310,7 @@ class NutanixMetrics:
                         entity = entity.replace(".","_")
                         entity = entity.replace("-","_")
                         self.__dict__[key].labels(mount_target=entity).set(value)
+                #endregion stats
                 #endregion #?mount_target stats
 
         #endregion #?files
@@ -1434,6 +1494,7 @@ class NutanixMetrics:
                 #endregion #?volume_group stats
                 
                 #region #?volume disks
+                #region get entities
                 volume_disk_details_list = []
                 metrics=[]
                 for entity in volume_group_list:
@@ -1461,7 +1522,9 @@ class NutanixMetrics:
                                     finally:
                                         progress_bar.update(1)
                         volume_disk_list = entity_list
+                    #endregion get entities
 
+                #region stats
                     for volume_disk in volume_disk_list:
                         #populate the list with the volume disk details
                         entity_details = {
@@ -1506,6 +1569,7 @@ class NutanixMetrics:
                         entity = entity.replace(".","_")
                         entity = entity.replace("-","_")
                         self.__dict__[key].labels(volume_disk=entity).set(value)
+                #endregion stats
                 
                 #endregion #?volume disks
 
