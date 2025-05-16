@@ -1063,14 +1063,452 @@ class NutanixMetrics:
 
 
         #region #?files
+        if self.files_metrics:
+            #* initialize variable for API client configuration
+            api_client_configuration = ntnx_files_py_client.Configuration()
+            api_client_configuration.host = self.prism
+            api_client_configuration.username = self.user
+            api_client_configuration.password = self.pwd
+
+            if self.prism_secure is False:
+                #! suppress warnings about insecure connections
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                #! suppress ssl certs verification
+                api_client_configuration.verify_ssl = False
+
+            client = ntnx_files_py_client.ApiClient(configuration=api_client_configuration)
+            
+            #region #?get files servers list
+            entity_api = ntnx_files_py_client.FileServersApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Nutanix Files servers...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_file_servers(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            if total_available_results:
+                page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of Nutanix Files server entities") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_files_py_client,
+                                entity_api='FileServersApi',
+                                client=client,
+                                function='list_file_servers',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                files_server_list = entity_list
+                #endregion #?get files servers list
+                
+                #region #?antivirus stats
+                #* get metrics for each files antivirus server
+                antivirus_server_details_list = []
+                metrics=[]
+                for entity in files_server_list:
+                    #get antivirus servers for each file server
+                    entity_api = ntnx_files_py_client.AntivirusServersApi(api_client=client)
+                    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching list of external antivirus servers for Files server instance {entity.name}...{PrintColors.RESET}")
+                    response = entity_api.list_antivirus_servers(fileServerExtId=entity.ext_id,_page=0,_limit=100)
+                    antivirus_server_list = response.data
+                    for av_server in antivirus_server_list:
+                        #populate the list with the file server antivirus details
+                        entity_details = {
+                            'entity_name': av_server.name,
+                            'entity_uuid': av_server.ext_id,
+                            'entity_parent_name': entity.name,
+                            'entity_parent_uuid': entity.ext_id,
+                        }
+                        antivirus_server_details_list.append(entity_details)
+                
+                if len(antivirus_server_details_list) > 0:
+                    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
+                    
+                    with tqdm.tqdm(total=len(antivirus_server_details_list), desc="Fetching Files Server antivirus metrics") as progress_bar:
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = [executor.submit(
+                                    v4_get_files_analytics_stats,
+                                    client=client,
+                                    module=ntnx_files_py_client,
+                                    entity_api='AnalyticsApi',
+                                    function='get_antivirus_server_stats',
+                                    entity=antivirus_server,
+                                    metric_key_prefix=f'nutanix_files_antivirus_stats_'
+                                ) for antivirus_server in antivirus_server_details_list]
+                            for future in as_completed(futures):
+                                try:
+                                    entities = future.result()
+                                    metrics.extend(entities)
+                                except Exception as e:
+                                    print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                                finally:
+                                    progress_bar.update(1)
+                    for metric in metrics:
+                        #print(metric)
+                        key, entity, value = metric.split(':')
+                        #print(f"key: {key}, entity: {entity}, value: {value}")
+                        entity_parent = next(iter([item['entity_parent_name'] for item in antivirus_server_details_list if item['entity_name'] == entity]))
+                        entity = f"{entity_parent}_{entity}"
+                        entity = entity.replace(".","_")
+                        entity = entity.replace("-","_")
+                        self.__dict__[key].labels(antivirus=entity).set(value)
+                #endregion #?antivirus stats
+
+                #region #?file_server stats
+                #* get metrics for each files antivirus server
+                files_server_details_list = []
+                metrics=[]
+                for entity in files_server_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    files_server_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
+                
+                with tqdm.tqdm(total=len(files_server_details_list), desc="Fetching Files Server metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_files_analytics_stats,
+                                client=client,
+                                module=ntnx_files_py_client,
+                                entity_api='AnalyticsApi',
+                                function='get_file_server_stats',
+                                entity=file_server,
+                                metric_key_prefix='nutanix_files_file_server_stats_'
+                            ) for file_server in files_server_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(file_server=entity).set(value)
+                #endregion #?file_server stats
+
+                #region #?mount_target stats
+                #* get metrics for each mount target
+                mount_target_details_list = []
+                metrics=[]
+                for entity in files_server_list:
+                    #get antivirus servers for each file server
+                    entity_api = ntnx_files_py_client.MountTargetsApi(api_client=client)
+                    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching list of mount targets for Files server instance {entity.name}...{PrintColors.RESET}")
+                    response = entity_api.list_mount_targets(fileServerExtId=entity.ext_id,_page=0,_limit=100)
+                    mount_target_list = response.data
+                    for mount_target in mount_target_list:
+                        #populate the list with the file server antivirus details
+                        entity_details = {
+                            'entity_name': mount_target.name,
+                            'entity_uuid': mount_target.ext_id,
+                            'entity_parent_name': entity.name,
+                            'entity_parent_uuid': entity.ext_id,
+                        }
+                        mount_target_details_list.append(entity_details)
+                
+                if mount_target_details_list:
+                    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(mount_target_details_list)} entities...{PrintColors.RESET}")
+                    
+                    with tqdm.tqdm(total=len(mount_target_details_list), desc="Fetching Files Server mount target metrics") as progress_bar:
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = [executor.submit(
+                                    v4_get_files_analytics_stats,
+                                    client=client,
+                                    module=ntnx_files_py_client,
+                                    entity_api='AnalyticsApi',
+                                    function='get_mount_target_stats',
+                                    entity=mount_target,
+                                    metric_key_prefix='nutanix_files_mount_target_stats_'
+                                ) for mount_target in mount_target_details_list]
+                            for future in as_completed(futures):
+                                try:
+                                    entities = future.result()
+                                    metrics.extend(entities)
+                                except Exception as e:
+                                    print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                                finally:
+                                    progress_bar.update(1)
+                    for metric in metrics:
+                        #print(metric)
+                        key, entity, value = metric.split(':')
+                        #print(f"key: {key}, entity: {entity}, value: {value}")
+                        entity_parent = next(iter([item['entity_parent_name'] for item in mount_target_details_list if item['entity_name'] == entity]))
+                        entity = f"{entity_parent}_{entity}"
+                        entity = entity.replace(".","_")
+                        entity = entity.replace("-","_")
+                        self.__dict__[key].labels(mount_target=entity).set(value)
+                #endregion #?mount_target stats
+
         #endregion #?files
 
 
         #region #?objects
+        if self.object_metrics:
+            #* initialize variable for API client configuration
+            api_client_configuration = ntnx_objects_py_client.Configuration()
+            api_client_configuration.host = self.prism
+            api_client_configuration.username = self.user
+            api_client_configuration.password = self.pwd
+
+            if self.prism_secure is False:
+                #! suppress warnings about insecure connections
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                #! suppress ssl certs verification
+                api_client_configuration.verify_ssl = False
+
+            client = ntnx_objects_py_client.ApiClient(configuration=api_client_configuration)
+
+            #region #?get object stores
+            entity_api = ntnx_objects_py_client.ObjectStoresApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching Nutanix Objects object stores...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_objectstores(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            if total_available_results:
+                page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of Nutanix Objects object store entities") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_objects_py_client,
+                                entity_api='ObjectStoresApi',
+                                client=client,
+                                function='list_objectstores',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                object_store_list = entity_list
+                #endregion #?get object stores
+
+                #region #?object_store stats
+                #* get metrics for each files antivirus server
+                object_store_details_list = []
+                metrics=[]
+                for entity in object_store_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    object_store_details_list.append(entity_details)
+                #print(object_store_details_list)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(object_store_details_list)} entities...{PrintColors.RESET}")
+                
+                with tqdm.tqdm(total=len(object_store_details_list), desc="Fetching object store metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_objectstore_stats,
+                                client=client,
+                                module=ntnx_objects_py_client,
+                                entity_api='StatsApi',
+                                function='get_objectstore_stats_by_id',
+                                entity=object_store,
+                                metric_key_prefix='nutanix_objects_objectstore_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for object_store in object_store_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(objectstore=entity).set(value)
+                #endregion #?object_store stats
+
         #endregion #?objects
 
 
         #region #?volumes
+        if self.volumes_metrics:
+            #* initialize variable for API client configuration
+            api_client_configuration = ntnx_volumes_py_client.Configuration()
+            api_client_configuration.host = self.prism
+            api_client_configuration.username = self.user
+            api_client_configuration.password = self.pwd
+
+            if self.prism_secure is False:
+                #! suppress warnings about insecure connections
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                #! suppress ssl certs verification
+                api_client_configuration.verify_ssl = False
+
+            client = ntnx_volumes_py_client.ApiClient(configuration=api_client_configuration)
+
+            #region #?get volume groups
+            entity_api = ntnx_volumes_py_client.VolumeGroupsApi(api_client=client)
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching volume groups...{PrintColors.RESET}")
+            entity_list=[]
+            response = entity_api.list_volume_groups(_page=0,_limit=1)
+            total_available_results=response.metadata.total_available_results
+            if total_available_results:
+                page_count = math.ceil(total_available_results/limit)
+            if page_count > 0:
+                with tqdm.tqdm(total=page_count, desc="Fetching pages of Nutanix Volume volume group entities") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=ntnx_volumes_py_client,
+                                entity_api='VolumeGroupsApi',
+                                client=client,
+                                function='list_volume_groups',
+                                page=page_number,
+                                limit=limit
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                entity_list.extend(entities.data)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                volume_group_list = entity_list
+                #endregion #?get volume groups
+
+                #region #?volume_group stats
+                volume_group_details_list = []
+                metrics=[]
+                for entity in volume_group_list:
+                    entity_details = {
+                        'entity_name': entity.name,
+                        'entity_uuid': entity.ext_id,
+                    }
+                    volume_group_details_list.append(entity_details)
+                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_group_details_list)} entities...{PrintColors.RESET}")
+                
+                with tqdm.tqdm(total=len(volume_group_details_list), desc="Fetching volume group metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_volumes_py_client,
+                                entity_api='VolumeGroupsApi',
+                                function='get_volume_group_stats',
+                                entity=volume_group,
+                                metric_key_prefix='nutanix_volumes_volume_group_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for volume_group in volume_group_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                metrics.extend(entities)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(volume_group=entity).set(value)
+                #endregion #?volume_group stats
+                
+                #region #?volume disks
+                volume_disk_details_list = []
+                metrics=[]
+                for entity in volume_group_list:
+                    #get volume disks for each volume group
+                    entity_list=[]
+                    response = entity_api.list_volume_disks_by_volume_group_id(volumeGroupExtId=entity.ext_id,_page=0,_limit=1)
+                    total_available_results=response.metadata.total_available_results
+                    if total_available_results:
+                        page_count = math.ceil(total_available_results/limit)
+                    if page_count > 0:
+                        with tqdm.tqdm(total=page_count, desc=f"Fetching pages of Nutanix Volume volume disk entities for volume group {entity.name}") as progress_bar:
+                            with ThreadPoolExecutor(max_workers=10) as executor:
+                                futures = [executor.submit(
+                                        entity_api.list_volume_disks_by_volume_group_id,
+                                        volumeGroupExtId=entity.ext_id,
+                                        page=page_number,
+                                        limit=limit
+                                    ) for page_number in range(0, page_count, 1)]
+                                for future in as_completed(futures):
+                                    try:
+                                        entities = future.result()
+                                        entity_list.extend(entities.data)
+                                    except Exception as e:
+                                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                                    finally:
+                                        progress_bar.update(1)
+                        volume_disk_list = entity_list
+
+                    for volume_disk in volume_disk_list:
+                        #populate the list with the volume disk details
+                        entity_details = {
+                            'entity_name': f"{entity.name}_{volume_disk.index}",
+                            'entity_uuid': volume_disk.ext_id,
+                            'entity_parent_name': entity.name,
+                            'entity_parent_uuid': entity.ext_id,
+                        }
+                        volume_disk_details_list.append(entity_details)
+                
+                if len(volume_disk_details_list) > 0:
+                    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_disk_details_list)} entities...{PrintColors.RESET}")
+                    
+                    with tqdm.tqdm(total=len(volume_disk_details_list), desc="Fetching volume disk metrics") as progress_bar:
+                        with ThreadPoolExecutor(max_workers=10) as executor:
+                            futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=client,
+                                module=ntnx_volumes_py_client,
+                                entity_api='VolumeGroupsApi',
+                                function='get_volume_disk_stats',
+                                entity=volume_disk,
+                                metric_key_prefix='nutanix_volumes_volume_disk_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for volume_disk in volume_disk_details_list]
+                            for future in as_completed(futures):
+                                try:
+                                    entities = future.result()
+                                    metrics.extend(entities)
+                                except Exception as e:
+                                    print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                                finally:
+                                    progress_bar.update(1)
+                    for metric in metrics:
+                        #print(metric)
+                        key, entity, value = metric.split(':')
+                        #print(f"key: {key}, entity: {entity}, value: {value}")
+                        #print(volume_disk_details_list)
+                        entity_parent = next(iter([item['entity_parent_name'] for item in volume_disk_details_list if item['entity_name'] == entity]))
+                        entity = f"{entity_parent}_{entity}"
+                        entity = entity.replace(".","_")
+                        entity = entity.replace("-","_")
+                        self.__dict__[key].labels(volume_disk=entity).set(value)
+                
+                #endregion #?volume disks
+
         #endregion #?volumes
 
 
@@ -2433,6 +2871,8 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
     '''
 
     #* fetch metrics for entity
+    if metric_key_prefix.startswith('nutanix_files_'):
+        sampling_interval = 300
     entity_api_module = getattr(module, entity_api)
     entity_api = entity_api_module(api_client=client)
     get_stats_function = getattr(entity_api, function)
@@ -2451,7 +2891,7 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
         metrics = response.data.to_dict()
 
     #print(metrics)
-    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
+    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type', 'volume_group_ext_id', 'volume_disk_ext_id']
     lb_stats = ['listener_stats','target_stats']
     metrics_list = []
     #print(metrics)
@@ -2489,6 +2929,93 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
                             metrics_list.append(metric_to_return)
                             #print(f"{entity['entity_name']}:{key_string}:{metric_data[0]['value']}")
                             #self.__dict__[key_string].labels(host=entity['entity_name']).set(metric_data[0]['value'])
+    #print(metrics_list)
+    return metrics_list
+
+
+def v4_get_files_analytics_stats(client,module,entity_api,function,entity,metric_key_prefix):
+    '''v4_get_files_analytics_stats function.
+       Fetches metrics for a specified entity.
+        Args:
+            client: a v4 Python SDK client object.
+            entity: an entity uuid/ext_id
+            minutes_ago: integer indicating the number of minutes to get metrics for (exp: 60 would mean get the metrics for the last hour).
+        Returns:
+    '''
+
+    #* fetch metrics for entity
+    sampling_interval = 300
+    entity_api_module = getattr(module, entity_api)
+    entity_api = entity_api_module(api_client=client)
+    get_stats_function = getattr(entity_api, function)
+    
+    start_time = (datetime.now(timezone.utc) - timedelta(seconds=600)).isoformat()
+    end_time = (datetime.now(timezone.utc)).isoformat()
+    if 'entity_parent_uuid' in entity:
+        response = get_stats_function(entity['entity_parent_uuid'],extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _select='*')
+    else:
+        response = get_stats_function(extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _select='*')
+    #print(type(response.data))
+    #print(response.data)
+    metrics = response.data.to_dict()
+
+    #print(metrics)
+    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
+    metrics_list = []
+    #print(metrics)
+    for metric in metrics:
+        #print(metric)
+        if metric is not None:
+            if metric not in exclude_list:
+                metric_data = metrics.get(metric)
+                if metric_data is not None:
+                    key_string = f"{metric_key_prefix}{metric}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]['value']}"
+                    metrics_list.append(metric_to_return)
+                    #print(f"{entity['entity_name']}:{key_string}:{metric_data[0]['value']}")
+                    #self.__dict__[key_string].labels(host=entity['entity_name']).set(metric_data[0]['value'])
+    return metrics_list
+
+
+def v4_get_objectstore_stats(client,module,entity_api,function,entity,metric_key_prefix,sampling_interval,stat_type):
+    '''v4_get_objectstore_stats function.
+       Fetches metrics for a specified entity.
+        Args:
+            client: a v4 Python SDK client object.
+            entity: an entity uuid/ext_id
+            minutes_ago: integer indicating the number of minutes to get metrics for (exp: 60 would mean get the metrics for the last hour).
+            sampling_interval: integer used to specify in seconds the sampling interval.
+            stat_type: The operator to use while performing down-sampling on stats data. Allowed values are SUM, MIN, MAX, AVG, COUNT and LAST.
+        Returns:
+    '''
+
+    #* fetch metrics for entity
+    entity_api_module = getattr(module, entity_api)
+    entity_api = entity_api_module(api_client=client)
+    get_stats_function = getattr(entity_api, function)
+    
+    start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
+    end_time = (datetime.now(timezone.utc)).isoformat()
+    if 'entity_parent_uuid' in entity:
+        response = get_stats_function(entity['entity_parent_uuid'],extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type)
+    else:
+        response = get_stats_function(extId=entity['entity_uuid'], _startTime=start_time, _endTime=end_time, _samplingInterval=sampling_interval, _statType=stat_type)
+    metrics = response.data.to_dict()
+
+    exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
+    metrics_list = []
+    for metric in metrics:
+        if metric is not None:
+            if metric not in exclude_list:
+                metric_data = metrics.get(metric)
+                if metric_data is not None:
+                    key_string = f"{metric_key_prefix}{metric}"
+                    key_string = key_string.replace(".","_")
+                    key_string = key_string.replace("-","_")
+                    metric_to_return = f"{key_string}:{entity['entity_name']}:{metric_data[0]['value']}"
+                    metrics_list.append(metric_to_return)
     return metrics_list
 
 
@@ -2576,7 +3103,7 @@ def main():
     else:
         volumes_metrics = False
 
-    hosts_metrics_env = os.getenv('VOLUMES_METRICS',default='False')
+    hosts_metrics_env = os.getenv('HOSTS_METRICS',default='False')
     if hosts_metrics_env is not None:
         hosts_metrics = hosts_metrics_env.lower() in ("true", "1", "t", "y", "yes")
     else:
