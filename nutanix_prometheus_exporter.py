@@ -91,7 +91,7 @@ class NutanixMetrics:
         stats_count = 0
         complete_stats_list = {}
         complete_stats_list.update({'info': {}})
-        
+
         #region #?clusters
         if self.cluster_metrics:
             #region stats
@@ -128,6 +128,12 @@ class NutanixMetrics:
                 "nutanix_count_vm",
                 "nutanix_count_vm_on",
                 "nutanix_count_vm_off",
+                "nutanix_count_vm_boot_legacy",
+                "nutanix_count_vm_boot_uefi",
+                "nutanix_count_vm_gpus",
+                "nutanix_count_vm_unprotected",
+                "nutanix_count_vm_pd_protected",
+                "nutanix_count_vm_rule_protected",
                 "nutanix_count_vcpu",
                 "nutanix_count_vram_mib",
                 "nutanix_count_vdisk",
@@ -320,11 +326,11 @@ class NutanixMetrics:
 
         #region #?clustermgmt
         #* initialize variable for API client configuration
-        client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+        clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
         #region #?clusters
         if self.cluster_metrics:
-            cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
+            cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
 
             #region stats
             #* get metrics for each cluster
@@ -343,7 +349,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=clustermgmt_client,
                             module=ntnx_clustermgmt_py_client,
                             entity_api='ClustersApi',
                             function='get_cluster_stats',
@@ -368,6 +374,43 @@ class NutanixMetrics:
             #endregion stats
         
             #region count
+            #region vg
+            if not volume_group_list:
+                volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    self.__dict__["nutanix_count_vg"].labels(entity=cluster.name).set(len([vg for vg in volume_group_list if vg.cluster_reference == cluster.ext_id]))
+                else:
+                    self.__dict__["nutanix_count_vg"].labels(entity=self.prism).set(len(volume_group_list))
+            #endregion vg
+            #region vm
+            if not vms_list:
+                vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    cluster_vms_list= [vm for vm in vms_list if vm.cluster.ext_id == cluster.ext_id]
+                    self.__dict__["nutanix_count_vm"].labels(entity=cluster.name).set(len(cluster_vms_list))
+                    self.__dict__["nutanix_count_vm_on"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.power_state == 'ON']))
+                    self.__dict__["nutanix_count_vm_off"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.power_state == 'OFF']))
+                    self.__dict__["nutanix_count_vm_boot_legacy"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.boot_config.__class__.__name__ == 'LegacyBoot']))
+                    self.__dict__["nutanix_count_vm_boot_uefi"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.boot_config.__class__.__name__ == 'UefiBoot']))
+                    self.__dict__["nutanix_count_vm_gpus"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.gpus]))
+                    self.__dict__["nutanix_count_vm_unprotected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'UNPROTECTED']))
+                    self.__dict__["nutanix_count_vm_pd_protected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'PD_PROTECTED']))
+                    self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'RULE_PROTECTED']))
+                else:
+                    self.__dict__["nutanix_count_vm"].labels(entity=self.prism).set(len(vms_list))
+                    self.__dict__["nutanix_count_vm_on"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.power_state == 'ON']))
+                    self.__dict__["nutanix_count_vm_off"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.power_state == 'OFF']))
+                    self.__dict__["nutanix_count_vm_boot_legacy"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.boot_config.__class__.__name__ == 'LegacyBoot']))
+                    self.__dict__["nutanix_count_vm_boot_uefi"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.boot_config.__class__.__name__ == 'UefiBoot']))
+                    self.__dict__["nutanix_count_vm_gpus"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.gpus]))
+                    self.__dict__["nutanix_count_vm_unprotected"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.protection_type == 'UNPROTECTED']))
+                    self.__dict__["nutanix_count_vm_pd_protected"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.protection_type == 'PD_PROTECTED']))
+                    self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=self.prism).set(len([vm for vm in vms_list if vm.protection_type == 'RULE_PROTECTED']))
+            #endregion vm
             #endregion count
         
         #endregion #?clusters
@@ -375,7 +418,7 @@ class NutanixMetrics:
         #region #?hosts
         if self.hosts_metrics:
             if not host_list:
-                host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
+                host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
 
             #region stats
             #* get metrics for each cluster
@@ -395,7 +438,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=clustermgmt_client,
                             module=ntnx_clustermgmt_py_client,
                             entity_api='ClustersApi',
                             function='get_host_stats',
@@ -423,7 +466,7 @@ class NutanixMetrics:
         #region #?storage_containers
         if self.storage_containers_metrics:
             if not storage_container_list:
-                storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
+                storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
 
             #region stats
             #* get metrics for each storage container
@@ -441,7 +484,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=clustermgmt_client,
                             module=ntnx_clustermgmt_py_client,
                             entity_api='StorageContainersApi',
                             function='get_storage_container_stats',
@@ -473,7 +516,7 @@ class NutanixMetrics:
         #region #?disks
         if self.disks_metrics:
             if not disk_list:
-                disk_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=client,function='list_disks',limit=limit,module_entity_api='DisksApi')
+                disk_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_disks',limit=limit,module_entity_api='DisksApi')
 
             #region stats
             #* get metrics for each disk
@@ -490,7 +533,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=clustermgmt_client,
                             module=ntnx_clustermgmt_py_client,
                             entity_api='DisksApi',
                             function='get_disk_stats',
@@ -752,17 +795,17 @@ class NutanixMetrics:
         #region #?vmm
         if self.vm_list != '':
             #* initialize variable for API client configuration
-            client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
             if not vms_list:
-                vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=client,function='list_vms',limit=limit,module_entity_api='VmApi')
+                vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
 
             #region stats
             if (self.vm_list).lower() == 'all':
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VM stats...{PrintColors.RESET}")
                 start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
                 end_time = (datetime.now(timezone.utc)).isoformat()
-                entity_api = ntnx_vmm_py_client.StatsApi(api_client=client)
+                entity_api = ntnx_vmm_py_client.StatsApi(api_client=vmm_client)
                 response = entity_api.list_vm_stats(_page=0,_limit=1,_startTime=start_time, _endTime=end_time, _samplingInterval=30, _statType='LAST', _select='*')
                 total_available_results=response.metadata.total_available_results
                 page_count = math.ceil(total_available_results/limit)
@@ -771,7 +814,7 @@ class NutanixMetrics:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_all_vm_stats,
-                                client=client,
+                                client=vmm_client,
                                 page=page_number,
                                 limit=limit,
                                 start_time=start_time,
@@ -820,7 +863,7 @@ class NutanixMetrics:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entity_stats,
-                                client=client,
+                                client=vmm_client,
                                 module=ntnx_vmm_py_client,
                                 entity_api='StatsApi',
                                 function='get_vm_stats_by_id',
@@ -1067,9 +1110,9 @@ class NutanixMetrics:
         #region #?volumes
         if self.volumes_metrics:
             #* initialize variable for API client configuration
-            client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             if not volume_group_list:
-                volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
+                volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
 
             #region #?volume_group stats
             volume_group_details_list = []
@@ -1086,7 +1129,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=volumes_client,
                             module=ntnx_volumes_py_client,
                             entity_api='VolumeGroupsApi',
                             function='get_volume_group_stats',
@@ -1117,7 +1160,7 @@ class NutanixMetrics:
             for entity in volume_group_list:
                 #get volume disks for each volume group
                 entity_list=[]
-                entity_api = ntnx_volumes_py_client.VolumeGroupsApi(api_client=client)
+                entity_api = ntnx_volumes_py_client.VolumeGroupsApi(api_client=volumes_client)
                 response = entity_api.list_volume_disks_by_volume_group_id(volumeGroupExtId=entity.ext_id,_page=0,_limit=1)
                 total_available_results=response.metadata.total_available_results
                 if total_available_results:
@@ -1160,7 +1203,7 @@ class NutanixMetrics:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=volumes_client,
                             module=ntnx_volumes_py_client,
                             entity_api='VolumeGroupsApi',
                             function='get_volume_disk_stats',
