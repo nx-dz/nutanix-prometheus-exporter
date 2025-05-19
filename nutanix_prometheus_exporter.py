@@ -542,6 +542,18 @@ class NutanixMetrics:
                 object_store_list = v4_get_all_entities(module=ntnx_objects_py_client,client=objects_client,function='list_objectstores',limit=limit,module_entity_api='ObjectStoresApi')
                 self.__dict__["nutanix_count_objects_object_stores"].labels(entity=prism_central_hostname).set(len(object_store_list))
             #endregion object
+            
+            #region data protection
+            #todo: get list of vms which are protected by a protection policy: what about vgs?
+            #todo: retrieve data protection state for each entity
+            #endregion data protection
+            
+            #region protection policies
+            #todo: get list of protection policies and categorize per rpo (sync, nearsync, async)
+            #todo: get list of categories
+            #todo: for each category in each protection policy, count protected entities
+            #? maybe get entities for data protection state based on protection policies membership: so that you can have state per rpo?
+            #endregion protection policies
         #endregion #?prism_central
 
 
