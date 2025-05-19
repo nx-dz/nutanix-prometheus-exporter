@@ -167,7 +167,6 @@ class NutanixMetrics:
             #region count
             ntnx_clustermgmt_instance_type_count = ['host','cluster']
             key_strings = [
-                "nutanix_count_vg",
                 "nutanix_count_vm",
                 "nutanix_count_vm_on",
                 "nutanix_count_vm_off",
@@ -183,12 +182,30 @@ class NutanixMetrics:
                 "nutanix_count_vdisk_ide",
                 "nutanix_count_vdisk_sata",
                 "nutanix_count_vdisk_scsi",
-                "nutanix_count_vnic"
+                "nutanix_count_vnic",
+                "nutanix_count_disk",
+                "nutanix_count_disk_ssd_pcie",
+                "nutanix_count_disk_ssd_sata",
+                "nutanix_count_disk_das_sata",
+                "nutanix_count_disk_ssd_mem_nvme"
             ]
             stats_count += len(key_strings)
             for instance_type in ntnx_clustermgmt_instance_type_count:
                 complete_stats_list['clustermgmt'][instance_type].append(key_strings)
             for key_string in key_strings:
+                setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
+            cluster_unique_key_strings = [
+                "nutanix_count_vg",
+                "nutanix_count_node",
+                "nutanix_count_storage_container",
+                "nutanix_count_storage_container_encrypted",
+                "nutanix_count_storage_container_rf1",
+                "nutanix_count_storage_container_rf2",
+                "nutanix_count_storage_container_rf3"
+            ]
+            stats_count += len(cluster_unique_key_strings)
+            complete_stats_list['clustermgmt']['cluster'].append(cluster_unique_key_strings)
+            for key_string in cluster_unique_key_strings:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
             #endregion count
 
@@ -503,7 +520,49 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_vm_unprotected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'UNPROTECTED']))
                     self.__dict__["nutanix_count_vm_pd_protected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'PD_PROTECTED']))
                     self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'RULE_PROTECTED']))
+                    self.__dict__["nutanix_count_vcpu"].labels(entity=cluster.name).set(sum([(vm.num_sockets * vm.num_cores_per_socket) for vm in cluster_vms_list]))
+                    self.__dict__["nutanix_count_vram_mib"].labels(entity=cluster.name).set(sum([(vm.memory_size_bytes / 1048576) for vm in cluster_vms_list]))
+                    self.__dict__["nutanix_count_vdisk"].labels(entity=cluster.name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in cluster_vms_list))
+                    self.__dict__["nutanix_count_vdisk_ide"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in cluster_vms_list))
+                    self.__dict__["nutanix_count_vdisk_sata"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in cluster_vms_list))
+                    self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in cluster_vms_list))
+                    self.__dict__["nutanix_count_vnic"].labels(entity=cluster.name).set(sum([len(vm.nics) for vm in cluster_vms_list]))
             #endregion vm
+            #region host
+            if not host_list:
+                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    cluster_hosts_list = [host for host in host_list if host.cluster.uuid == cluster.ext_id]
+                    self.__dict__["nutanix_count_node"].labels(entity=cluster.name).set(len(cluster_hosts_list))
+            #endregion host
+            #region storage_container
+            if not storage_container_list:
+                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    cluster_storage_containers_list = [storage_container for storage_container in storage_container_list if storage_container.cluster_ext_id == cluster.ext_id]
+                    self.__dict__["nutanix_count_storage_container"].labels(entity=cluster.name).set(len(cluster_storage_containers_list))
+                    self.__dict__["nutanix_count_storage_container_encrypted"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.is_encrypted is True]))
+                    self.__dict__["nutanix_count_storage_container_rf1"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.replication_factor == 1]))
+                    self.__dict__["nutanix_count_storage_container_rf2"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.replication_factor == 2]))
+                    self.__dict__["nutanix_count_storage_container_rf3"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.replication_factor == 3]))
+            #endregion storage_container
+            #region disk
+            if not disk_list:
+                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                disk_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_disks',limit=limit,module_entity_api='DisksApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    cluster_disk_list = [disk for disk in disk_list if disk.cluster_ext_id == cluster.ext_id]
+                    self.__dict__["nutanix_count_disk"].labels(entity=cluster.name).set(len(cluster_disk_list))
+                    self.__dict__["nutanix_count_disk_ssd_pcie"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'SSD_PCIE']))
+                    self.__dict__["nutanix_count_disk_ssd_sata"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'SSD_SATA']))
+                    self.__dict__["nutanix_count_disk_das_sata"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'DAS_SATA']))
+                    self.__dict__["nutanix_count_disk_ssd_mem_nvme"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'SSD_MEM_NVME']))
+            #endregion disk
             #endregion count
         
         #endregion #?clusters
@@ -554,6 +613,45 @@ class NutanixMetrics:
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(host=entity).set(value)
             #endregion stats
+        
+            #region count
+            #region vm
+            if not vms_list:
+                vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
+            for host in host_list:
+                powered_on_vms_list= [vm for vm in vms_list if vm.power_state == 'ON']
+                host_vms_list= [vm for vm in powered_on_vms_list if vm.host.ext_id == host.ext_id]
+                self.__dict__["nutanix_count_vm"].labels(entity=host.host_name).set(len(host_vms_list))
+                self.__dict__["nutanix_count_vm_on"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.power_state == 'ON']))
+                self.__dict__["nutanix_count_vm_off"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.power_state == 'OFF']))
+                self.__dict__["nutanix_count_vm_boot_legacy"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.boot_config.__class__.__name__ == 'LegacyBoot']))
+                self.__dict__["nutanix_count_vm_boot_uefi"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.boot_config.__class__.__name__ == 'UefiBoot']))
+                self.__dict__["nutanix_count_vm_gpus"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.gpus]))
+                self.__dict__["nutanix_count_vm_unprotected"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.protection_type == 'UNPROTECTED']))
+                self.__dict__["nutanix_count_vm_pd_protected"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.protection_type == 'PD_PROTECTED']))
+                self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.protection_type == 'RULE_PROTECTED']))
+                self.__dict__["nutanix_count_vcpu"].labels(entity=host.host_name).set(sum([(vm.num_sockets * vm.num_cores_per_socket) for vm in host_vms_list]))
+                self.__dict__["nutanix_count_vram_mib"].labels(entity=host.host_name).set(sum([(vm.memory_size_bytes / 1048576) for vm in host_vms_list]))
+                self.__dict__["nutanix_count_vdisk"].labels(entity=host.host_name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in host_vms_list))
+                self.__dict__["nutanix_count_vdisk_ide"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in host_vms_list))
+                self.__dict__["nutanix_count_vdisk_sata"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in host_vms_list))
+                self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in host_vms_list))
+                self.__dict__["nutanix_count_vnic"].labels(entity=host.host_name).set(sum([len(vm.nics) for vm in host_vms_list]))
+            #endregion vm
+            #region disk
+            if not disk_list:
+                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                disk_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_disks',limit=limit,module_entity_api='DisksApi')
+            for host in host_list:
+                host_disk_list = [disk for disk in disk_list if disk.node_ext_id == host.ext_id]
+                self.__dict__["nutanix_count_disk"].labels(entity=host.host_name).set(len(host_disk_list))
+                self.__dict__["nutanix_count_disk_ssd_pcie"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'SSD_PCIE']))
+                self.__dict__["nutanix_count_disk_ssd_sata"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'SSD_SATA']))
+                self.__dict__["nutanix_count_disk_das_sata"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'DAS_SATA']))
+                self.__dict__["nutanix_count_disk_ssd_mem_nvme"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'SSD_MEM_NVME']))
+            #endregion disk
+            #endregion count
         #endregion #?hosts
 
         #region #?storage_containers
