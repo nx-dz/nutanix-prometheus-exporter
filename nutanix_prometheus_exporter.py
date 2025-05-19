@@ -147,7 +147,8 @@ class NutanixMetrics:
                 "nutanix_count_virtual_switch",
                 "nutanix_count_vpn_connection",
                 "nutanix_count_files_server",
-                "nutanix_count_files_unified_namespace"
+                "nutanix_count_files_unified_namespace",
+                "nutanix_count_objects_object_stores"
             ]
             stats_count += len(unique_pc_key_strings)
             complete_stats_list['prism_central'].append(unique_pc_key_strings)
@@ -422,11 +423,14 @@ class NutanixMetrics:
                     prism_central_hostname = self.prism
             except:
                 prism_central_hostname = self.prism
+            
             #region vg
-            volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-            volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
-            self.__dict__["nutanix_count_vg"].labels(entity=prism_central_hostname).set(len(volume_group_list))
+            if self.volumes_metrics:
+                volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
+                self.__dict__["nutanix_count_vg"].labels(entity=prism_central_hostname).set(len(volume_group_list))
             #endregion vg
+            
             #region vm
             vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
@@ -452,16 +456,19 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_ngt_reachable"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_reachable is True]))
             self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
+            
             #region cluster
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_cluster"].labels(entity=prism_central_hostname).set(len([cluster for cluster in cluster_list if 'PRISM_CENTRAL' not in cluster.config.cluster_function]))
             #endregion cluster
+            
             #region host
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_node"].labels(entity=prism_central_hostname).set(len(host_list))
             #endregion host
+            
             #region storage_container
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
@@ -471,6 +478,7 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_storage_container_rf2"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 2]))
             self.__dict__["nutanix_count_storage_container_rf3"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 3]))
             #endregion storage_container
+            
             #region networking
             networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
@@ -482,48 +490,58 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_subnet_overlay"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.subnet_type == 'OVERLAY']))
             self.__dict__["nutanix_count_subnet_external"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.is_external is True]))
 
-            vpc_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpcs',limit=limit,module_entity_api='VpcsApi')
-            self.__dict__["nutanix_count_vpc"].labels(entity=prism_central_hostname).set(len(vpc_list))
+            if self.networking_metrics:
+                vpc_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpcs',limit=limit,module_entity_api='VpcsApi')
+                self.__dict__["nutanix_count_vpc"].labels(entity=prism_central_hostname).set(len(vpc_list))
 
-            bgp_session_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_bgp_sessions',limit=limit,module_entity_api='BgpSessionsApi')
-            self.__dict__["nutanix_count_bgp_session"].labels(entity=prism_central_hostname).set(len(bgp_session_list))
+                bgp_session_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_bgp_sessions',limit=limit,module_entity_api='BgpSessionsApi')
+                self.__dict__["nutanix_count_bgp_session"].labels(entity=prism_central_hostname).set(len(bgp_session_list))
 
-            gateway_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_gateways',limit=limit,module_entity_api='GatewaysApi')
-            self.__dict__["nutanix_count_gateway"].labels(entity=prism_central_hostname).set(len(gateway_list))
+                gateway_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_gateways',limit=limit,module_entity_api='GatewaysApi')
+                self.__dict__["nutanix_count_gateway"].labels(entity=prism_central_hostname).set(len(gateway_list))
 
-            layer2_stretch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_layer2_stretches',limit=limit,module_entity_api='Layer2StretchesApi')
-            self.__dict__["nutanix_count_layer2_stretch"].labels(entity=prism_central_hostname).set(len(layer2_stretch_list))
+                layer2_stretch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_layer2_stretches',limit=limit,module_entity_api='Layer2StretchesApi')
+                self.__dict__["nutanix_count_layer2_stretch"].labels(entity=prism_central_hostname).set(len(layer2_stretch_list))
 
-            load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
-            self.__dict__["nutanix_count_load_balancer_session"].labels(entity=prism_central_hostname).set(len(load_balancer_sessions_list))
+                load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
+                self.__dict__["nutanix_count_load_balancer_session"].labels(entity=prism_central_hostname).set(len(load_balancer_sessions_list))
 
-            traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
-            self.__dict__["nutanix_count_traffic_mirror"].labels(entity=prism_central_hostname).set(len(traffic_mirrors_list))
+                traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
+                self.__dict__["nutanix_count_traffic_mirror"].labels(entity=prism_central_hostname).set(len(traffic_mirrors_list))
 
-            network_controller_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_network_controllers',limit=limit,module_entity_api='NetworkControllersApi')
-            self.__dict__["nutanix_count_network_controller"].labels(entity=prism_central_hostname).set(len(network_controller_list))
+                network_controller_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_network_controllers',limit=limit,module_entity_api='NetworkControllersApi')
+                self.__dict__["nutanix_count_network_controller"].labels(entity=prism_central_hostname).set(len(network_controller_list))
 
-            routing_policy_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_routing_policies',limit=limit,module_entity_api='RoutingPoliciesApi')
-            self.__dict__["nutanix_count_routing_policy"].labels(entity=prism_central_hostname).set(len(routing_policy_list))
+                routing_policy_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_routing_policies',limit=limit,module_entity_api='RoutingPoliciesApi')
+                self.__dict__["nutanix_count_routing_policy"].labels(entity=prism_central_hostname).set(len(routing_policy_list))
 
-            uplink_bond_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_uplink_bonds',limit=limit,module_entity_api='UplinkBondsApi')
-            self.__dict__["nutanix_count_uplink_bond"].labels(entity=prism_central_hostname).set(len(uplink_bond_list))
+                uplink_bond_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_uplink_bonds',limit=limit,module_entity_api='UplinkBondsApi')
+                self.__dict__["nutanix_count_uplink_bond"].labels(entity=prism_central_hostname).set(len(uplink_bond_list))
 
-            virtual_switch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_virtual_switches',limit=limit,module_entity_api='VirtualSwitchesApi')
-            self.__dict__["nutanix_count_virtual_switch"].labels(entity=prism_central_hostname).set(len(virtual_switch_list))
+                virtual_switch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_virtual_switches',limit=limit,module_entity_api='VirtualSwitchesApi')
+                self.__dict__["nutanix_count_virtual_switch"].labels(entity=prism_central_hostname).set(len(virtual_switch_list))
 
-            vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
-            self.__dict__["nutanix_count_vpn_connection"].labels(entity=prism_central_hostname).set(len(vpn_connection_list))
+                vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
+                self.__dict__["nutanix_count_vpn_connection"].labels(entity=prism_central_hostname).set(len(vpn_connection_list))
             #endregion networking
+            
             #region files
-            files_client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-            
-            files_server_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_file_servers',limit=limit,module_entity_api='FileServersApi')
-            self.__dict__["nutanix_count_files_server"].labels(entity=prism_central_hostname).set(len(files_server_list))
-            
-            unified_namespace_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_unified_namespaces',limit=limit,module_entity_api='UnifiedNamespacesApi')
-            self.__dict__["nutanix_count_files_unified_namespace"].labels(entity=prism_central_hostname).set(len(unified_namespace_list))
+            if self.files_metrics:
+                files_client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+
+                files_server_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_file_servers',limit=limit,module_entity_api='FileServersApi')
+                self.__dict__["nutanix_count_files_server"].labels(entity=prism_central_hostname).set(len(files_server_list))
+
+                unified_namespace_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_unified_namespaces',limit=limit,module_entity_api='UnifiedNamespacesApi')
+                self.__dict__["nutanix_count_files_unified_namespace"].labels(entity=prism_central_hostname).set(len(unified_namespace_list))
             #endregion files
+            
+            #region object
+            if self.object_metrics:
+                objects_client = v4_init_api_client(module='ntnx_objects_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                object_store_list = v4_get_all_entities(module=ntnx_objects_py_client,client=objects_client,function='list_objectstores',limit=limit,module_entity_api='ObjectStoresApi')
+                self.__dict__["nutanix_count_objects_object_stores"].labels(entity=prism_central_hostname).set(len(object_store_list))
+            #endregion object
         #endregion #?prism_central
 
 
@@ -659,7 +677,7 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_subnet"].labels(entity=cluster.name).set(len(cluster_subnets_list))
             #endregion networking
             #endregion count
-        
+
         #endregion #?clusters
 
         #region #?hosts
@@ -708,7 +726,7 @@ class NutanixMetrics:
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(host=entity).set(value)
             #endregion stats
-        
+
             #region count
             #region vm
             if not vms_list:
@@ -1212,7 +1230,7 @@ class NutanixMetrics:
             #region stats
             if len(antivirus_server_details_list) > 0:
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
-                
+
                 with tqdm.tqdm(total=len(antivirus_server_details_list), desc="Fetching Files Server antivirus metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
@@ -1350,9 +1368,9 @@ class NutanixMetrics:
         #region #?objects
         if self.object_metrics:
             #* initialize variable for API client configuration
-            client = v4_init_api_client(module='ntnx_objects_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            objects_client = v4_init_api_client(module='ntnx_objects_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             if not object_store_list:
-                object_store_list = v4_get_all_entities(module=ntnx_objects_py_client,client=client,function='list_objectstores',limit=limit,module_entity_api='ObjectStoresApi')
+                object_store_list = v4_get_all_entities(module=ntnx_objects_py_client,client=objects_client,function='list_objectstores',limit=limit,module_entity_api='ObjectStoresApi')
 
             #region #?object_store stats
             #* get metrics for each files antivirus server
@@ -1371,7 +1389,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_objectstore_stats,
-                            client=client,
+                            client=objects_client,
                             module=ntnx_objects_py_client,
                             entity_api='StatsApi',
                             function='get_objectstore_stats_by_id',
@@ -1522,7 +1540,7 @@ class NutanixMetrics:
                     entity = entity.replace("-","_")
                     self.__dict__[key].labels(volume_disk=entity).set(value)
             #endregion stats
-            
+
             #endregion #?volume disks
 
         #endregion #?volumes
@@ -2181,15 +2199,15 @@ class NutanixMetricsRedfish:
         key_string = "nutanix_power_consumption_power_consumed_watts"
         power = float(power_control.get('PowerConsumedWatts', 0))
         self.__dict__[key_string].labels(ipmi=ipmi_name).set(power)
-        
+
         key_string = "nutanix_power_consumption_min_consumed_watts"
         power = float(power_control.get('PowerMetrics', {}).get('MinConsumedWatts', 0))
         self.__dict__[key_string].labels(ipmi=ipmi_name).set(power_control['PowerMetrics']['MinConsumedWatts'])
-        
+
         key_string = "nutanix_power_consumption_max_consumed_watts"
         power = float(power_control.get('PowerMetrics', {}).get('MaxConsumedWatts', 0))
         self.__dict__[key_string].labels(ipmi=ipmi_name).set(power_control['PowerMetrics']['MaxConsumedWatts'])
-        
+
         key_string = "nutanix_power_consumption_average_consumed_watts"
         power = float(power_control.get('PowerMetrics', {}).get('AverageConsumedWatts', 0))
         self.__dict__[key_string].labels(ipmi=ipmi_name).set(power_control['PowerMetrics']['AverageConsumedWatts'])
