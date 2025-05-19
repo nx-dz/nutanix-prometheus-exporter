@@ -145,7 +145,9 @@ class NutanixMetrics:
                 "nutanix_count_traffic_mirror",
                 "nutanix_count_uplink_bond",
                 "nutanix_count_virtual_switch",
-                "nutanix_count_vpn_connection"
+                "nutanix_count_vpn_connection",
+                "nutanix_count_files_server",
+                "nutanix_count_files_unified_namespace"
             ]
             stats_count += len(unique_pc_key_strings)
             complete_stats_list['prism_central'].append(unique_pc_key_strings)
@@ -155,7 +157,7 @@ class NutanixMetrics:
             for key_string in key_strings:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
         #endregion #?prism_central
-        
+
         #region #?clusters
         if self.cluster_metrics:
             #region stats
@@ -326,7 +328,7 @@ class NutanixMetrics:
                 #print(f"{class_name}: {stats_metrics}")
             #endregion stats
         #endregion #?files
-        
+
         #region #?object
         if self.object_metrics:
             #region stats
@@ -352,7 +354,7 @@ class NutanixMetrics:
                 #print(f"{class_name}: {stats_metrics}")
             #endregion stats
         #endregion #?object
-        
+
         #region #?volumes
         if self.volumes_metrics:
             #region stats
@@ -381,7 +383,7 @@ class NutanixMetrics:
 
         print(f"{PrintColors.DATA}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [DATA] Initialized {stats_count} metrics.{PrintColors.RESET}")
         #print(json.dumps(complete_stats_list, indent=4))
-        
+
         #todo: add entity count metrics
         if self.show_stats_only is True:
             print(json.dumps(complete_stats_list, indent=4))
@@ -405,7 +407,7 @@ class NutanixMetrics:
 
         #define entity per page quantity limit when fetching entities from the Nutanix v4 API
         limit=100
-        
+
         #initialize variables
         cluster_list, host_list, storage_container_list, disk_list, subnet_list, layer2_stretch_list, load_balancer_sessions_list, traffic_mirrors_list, vpc_list, vpn_connection_list, vms_list, files_server_list, object_store_list, volume_group_list = ([] for i in range(14))
 
@@ -421,15 +423,13 @@ class NutanixMetrics:
             except:
                 prism_central_hostname = self.prism
             #region vg
-            if not volume_group_list:
-                volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-                volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
+            volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
             self.__dict__["nutanix_count_vg"].labels(entity=prism_central_hostname).set(len(volume_group_list))
             #endregion vg
             #region vm
-            if not vms_list:
-                vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-                vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
+            vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
             self.__dict__["nutanix_count_vm"].labels(entity=prism_central_hostname).set(len(vms_list))
             self.__dict__["nutanix_count_vm_on"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_list if vm.power_state == 'ON']))
             self.__dict__["nutanix_count_vm_off"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_list if vm.power_state == 'OFF']))
@@ -453,21 +453,18 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
             #region cluster
-            if not cluster_list:
-                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-                cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
+            clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_cluster"].labels(entity=prism_central_hostname).set(len([cluster for cluster in cluster_list if 'PRISM_CENTRAL' not in cluster.config.cluster_function]))
             #endregion cluster
             #region host
-            if not host_list:
-                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-                host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
+            clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_node"].labels(entity=prism_central_hostname).set(len(host_list))
             #endregion host
             #region storage_container
-            if not storage_container_list:
-                clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-                storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
+            clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
             self.__dict__["nutanix_count_storage_container"].labels(entity=prism_central_hostname).set(len(storage_container_list))
             self.__dict__["nutanix_count_storage_container_encrypted"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.is_encrypted is True]))
             self.__dict__["nutanix_count_storage_container_rf1"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 1]))
@@ -508,7 +505,7 @@ class NutanixMetrics:
 
             routing_policy_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_routing_policies',limit=limit,module_entity_api='RoutingPoliciesApi')
             self.__dict__["nutanix_count_routing_policy"].labels(entity=prism_central_hostname).set(len(routing_policy_list))
-            
+
             uplink_bond_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_uplink_bonds',limit=limit,module_entity_api='UplinkBondsApi')
             self.__dict__["nutanix_count_uplink_bond"].labels(entity=prism_central_hostname).set(len(uplink_bond_list))
 
@@ -518,9 +515,18 @@ class NutanixMetrics:
             vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
             self.__dict__["nutanix_count_vpn_connection"].labels(entity=prism_central_hostname).set(len(vpn_connection_list))
             #endregion networking
+            #region files
+            files_client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            
+            files_server_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_file_servers',limit=limit,module_entity_api='FileServersApi')
+            self.__dict__["nutanix_count_files_server"].labels(entity=prism_central_hostname).set(len(files_server_list))
+            
+            unified_namespace_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_unified_namespaces',limit=limit,module_entity_api='UnifiedNamespacesApi')
+            self.__dict__["nutanix_count_files_unified_namespace"].labels(entity=prism_central_hostname).set(len(unified_namespace_list))
+            #endregion files
         #endregion #?prism_central
-        
-        
+
+
         #region #?clustermgmt
         #* initialize variable for API client configuration
         clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -569,7 +575,7 @@ class NutanixMetrics:
                 #print(f"key: {key}, entity: {entity}, value: {value}")
                 self.__dict__[key].labels(cluster=entity).set(value)
             #endregion stats
-        
+
             #region count
             #region vg
             if not volume_group_list:
@@ -842,7 +848,7 @@ class NutanixMetrics:
                 self.__dict__[key].labels(disk=entity).set(value)
             #endregion stats
         #endregion #?disks
-        
+
         #endregion #?clustermgmt
 
 
@@ -898,7 +904,7 @@ class NutanixMetrics:
             #region #?load balancer sessions
             if not load_balancer_sessions_list:
                 load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
-                
+
             #region stats
             #* get metrics for each load balancer sessions
             load_balancer_sessions_details_list = []
@@ -943,7 +949,7 @@ class NutanixMetrics:
             #region #?traffic mirror
             if not traffic_mirrors_list:
                 traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
-                
+
             #region stats
             #* get metrics for each load balancer sessions
             traffic_mirrors_details_list = []
@@ -1033,7 +1039,7 @@ class NutanixMetrics:
             #region #?vpn connections
             if not vpn_connection_list:
                 vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
-                
+
             #region stats
             #* get metrics for each vpn connection
             vpn_connection_details_list = []
@@ -1133,7 +1139,7 @@ class NutanixMetrics:
                                             self.__dict__[key_string].labels(vm=vm_name).set(metric_data)
             else:
                 vm_list_array = self.vm_list.split(',')
-                
+
                 #* get metrics for each vm
                 vm_details_list = []
                 metrics=[]
@@ -1177,10 +1183,10 @@ class NutanixMetrics:
         #region #?files
         if self.files_metrics:
             #* initialize variable for API client configuration
-            client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            files_client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             if not files_server_list:
-                files_server_list = v4_get_all_entities(module=ntnx_files_py_client,client=client,function='list_file_servers',limit=limit,module_entity_api='FileServersApi')
-                
+                files_server_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_file_servers',limit=limit,module_entity_api='FileServersApi')
+
             #region #?antivirus stats
             #region get entities
             #* get metrics for each files antivirus server
@@ -1188,7 +1194,7 @@ class NutanixMetrics:
             metrics=[]
             for entity in files_server_list:
                 #get antivirus servers for each file server
-                entity_api = ntnx_files_py_client.AntivirusServersApi(api_client=client)
+                entity_api = ntnx_files_py_client.AntivirusServersApi(api_client=files_client)
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching list of external antivirus servers for Files server instance {entity.name}...{PrintColors.RESET}")
                 response = entity_api.list_antivirus_servers(fileServerExtId=entity.ext_id,_page=0,_limit=100)
                 antivirus_server_list = response.data
@@ -1202,7 +1208,7 @@ class NutanixMetrics:
                     }
                     antivirus_server_details_list.append(entity_details)
             #endregion get entities
-            
+
             #region stats
             if len(antivirus_server_details_list) > 0:
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
@@ -1211,7 +1217,7 @@ class NutanixMetrics:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_files_analytics_stats,
-                                client=client,
+                                client=files_client,
                                 module=ntnx_files_py_client,
                                 entity_api='AnalyticsApi',
                                 function='get_antivirus_server_stats',
@@ -1250,15 +1256,15 @@ class NutanixMetrics:
                 }
                 files_server_details_list.append(entity_details)
             #endregion get entities
-            
+
             #region stats
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
-            
+
             with tqdm.tqdm(total=len(files_server_details_list), desc="Fetching Files Server metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_files_analytics_stats,
-                            client=client,
+                            client=files_client,
                             module=ntnx_files_py_client,
                             entity_api='AnalyticsApi',
                             function='get_file_server_stats',
@@ -1288,7 +1294,7 @@ class NutanixMetrics:
             metrics=[]
             for entity in files_server_list:
                 #get antivirus servers for each file server
-                entity_api = ntnx_files_py_client.MountTargetsApi(api_client=client)
+                entity_api = ntnx_files_py_client.MountTargetsApi(api_client=files_client)
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching list of mount targets for Files server instance {entity.name}...{PrintColors.RESET}")
                 response = entity_api.list_mount_targets(fileServerExtId=entity.ext_id,_page=0,_limit=100)
                 mount_target_list = response.data
@@ -1306,12 +1312,12 @@ class NutanixMetrics:
             #region stats
             if mount_target_details_list:
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(mount_target_details_list)} entities...{PrintColors.RESET}")
-                
+
                 with tqdm.tqdm(total=len(mount_target_details_list), desc="Fetching Files Server mount target metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_files_analytics_stats,
-                                client=client,
+                                client=files_client,
                                 module=ntnx_files_py_client,
                                 entity_api='AnalyticsApi',
                                 function='get_mount_target_stats',
@@ -1360,7 +1366,7 @@ class NutanixMetrics:
                 object_store_details_list.append(entity_details)
             #print(object_store_details_list)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(object_store_details_list)} entities...{PrintColors.RESET}")
-            
+
             with tqdm.tqdm(total=len(object_store_details_list), desc="Fetching object store metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
@@ -1409,7 +1415,7 @@ class NutanixMetrics:
                 }
                 volume_group_details_list.append(entity_details)
             print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_group_details_list)} entities...{PrintColors.RESET}")
-            
+
             with tqdm.tqdm(total=len(volume_group_details_list), desc="Fetching volume group metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
@@ -1480,10 +1486,10 @@ class NutanixMetrics:
                         'entity_parent_uuid': entity.ext_id,
                     }
                     volume_disk_details_list.append(entity_details)
-            
+
             if len(volume_disk_details_list) > 0:
                 print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_disk_details_list)} entities...{PrintColors.RESET}")
-                
+
                 with tqdm.tqdm(total=len(volume_disk_details_list), desc="Fetching volume disk metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
@@ -1720,7 +1726,7 @@ class NutanixMetricsLegacy:
             vm_details = prism_get_vms(api_server=self.prism,username=self.user,secret=self.pwd,secure=self.prism_secure,api_requests_timeout_seconds=self.api_requests_timeout_seconds, api_requests_retries=self.api_requests_retries, api_sleep_seconds_between_retries=self.api_sleep_seconds_between_retries)
             hosts_details = prism_get_hosts(api_server=self.prism,username=self.user,secret=self.pwd,secure=self.prism_secure,api_requests_timeout_seconds=self.api_requests_timeout_seconds, api_requests_retries=self.api_requests_retries, api_sleep_seconds_between_retries=self.api_sleep_seconds_between_retries)
             vg_details = prism_get_volume_groups(api_server=self.prism,username=self.user,secret=self.pwd,secure=self.prism_secure,api_requests_timeout_seconds=self.api_requests_timeout_seconds, api_requests_retries=self.api_requests_retries, api_sleep_seconds_between_retries=self.api_sleep_seconds_between_retries)
-            
+
             vms_powered_on = [vm for vm in vm_details if vm['power_state'] == "on"]
 
             for host in hosts_details:
@@ -1929,7 +1935,7 @@ class NutanixMetricsLegacy:
                 entity_api_root='vms',
                 secure=self.prism_secure
             )
-            
+
             vg_count = get_total_entities(
                 api_server=self.prism,
                 username=self.user,
@@ -1957,7 +1963,7 @@ class NutanixMetricsLegacy:
             #* volume groups metrics
             key_string = "nutanix_count_vg"
             self.__dict__[key_string].labels(prism_central=prism_central_hostname).set(vg_count)
-            
+
             #* general vm count metrics
             key_string = "nutanix_count_vm"
             self.__dict__[key_string].labels(prism_central=prism_central_hostname).set(len(vm_details))
@@ -2886,27 +2892,28 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
     entity_list=[]
     response = list_function(_page=0,_limit=1)
     total_available_results=response.metadata.total_available_results
-    page_count = math.ceil(total_available_results/limit)
-    if page_count > 0:
-        with tqdm.tqdm(total=page_count, desc=f"Fetching pages {function} in {module_entity_api}") as progress_bar:
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(
-                        v4_get_entities,
-                        module=module,
-                        entity_api=module_entity_api,
-                        client=client,
-                        function=function,
-                        page=page_number,
-                        limit=limit
-                    ) for page_number in range(0, page_count, 1)]
-                for future in as_completed(futures):
-                    try:
-                        entities = future.result()
-                        entity_list.extend(entities.data)
-                    except Exception as e:
-                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                    finally:
-                        progress_bar.update(1)
+    if total_available_results:
+        page_count = math.ceil(total_available_results/limit)
+        if page_count > 0:
+            with tqdm.tqdm(total=page_count, desc=f"Fetching pages {function} in {module_entity_api}") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_entities,
+                            module=module,
+                            entity_api=module_entity_api,
+                            client=client,
+                            function=function,
+                            page=page_number,
+                            limit=limit
+                        ) for page_number in range(0, page_count, 1)]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            entity_list.extend(entities.data)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
     else:
         print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}...{PrintColors.RESET}")
     return entity_list
@@ -2930,7 +2937,7 @@ def v4_get_entity_stats(client,module,entity_api,function,entity,metric_key_pref
     entity_api_module = getattr(module, entity_api)
     entity_api = entity_api_module(api_client=client)
     get_stats_function = getattr(entity_api, function)
-    
+
     start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
     end_time = (datetime.now(timezone.utc)).isoformat()
     if 'entity_parent_uuid' in entity:
@@ -3002,7 +3009,7 @@ def v4_get_files_analytics_stats(client,module,entity_api,function,entity,metric
     entity_api_module = getattr(module, entity_api)
     entity_api = entity_api_module(api_client=client)
     get_stats_function = getattr(entity_api, function)
-    
+
     start_time = (datetime.now(timezone.utc) - timedelta(seconds=600)).isoformat()
     end_time = (datetime.now(timezone.utc)).isoformat()
     if 'entity_parent_uuid' in entity:
@@ -3049,7 +3056,7 @@ def v4_get_objectstore_stats(client,module,entity_api,function,entity,metric_key
     entity_api_module = getattr(module, entity_api)
     entity_api = entity_api_module(api_client=client)
     get_stats_function = getattr(entity_api, function)
-    
+
     start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
     end_time = (datetime.now(timezone.utc)).isoformat()
     if 'entity_parent_uuid' in entity:
@@ -3097,7 +3104,7 @@ def v4_init_api_client(module, prism, user, pwd, prism_secure=False):
 
     try:
         # Dynamically import the module
-        module = importlib.import_module(module) 
+        module = importlib.import_module(module)
     except ModuleNotFoundError:
         print(f"Error: Could not import module '{module}'. Make sure it is installed.")
         return None
@@ -3145,7 +3152,7 @@ def main():
         disks_metrics = disks_metrics_env.lower() in ("true", "1", "t", "y", "yes")
     else:
         disks_metrics = False
-    
+
     ipmi_metrics_env = os.getenv('IPMI_METRICS',default='True')
     if ipmi_metrics_env is not None:
         ipmi_metrics = ipmi_metrics_env.lower() in ("true", "1", "t", "y", "yes")
@@ -3198,8 +3205,8 @@ def main():
     if show_stats_only_env is not None:
         show_stats_only = show_stats_only_env.lower() in ("true", "1", "t", "y", "yes")
     else:
-        show_stats_only = False    
-    
+        show_stats_only = False
+
     prism_secure_env = os.getenv('PRISM_SECURE',default='False')
     if prism_secure_env is not None:
         prism_secure = prism_secure_env.lower() in ("true", "1", "t", "y", "yes")
