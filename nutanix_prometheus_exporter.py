@@ -118,7 +118,11 @@ class NutanixMetrics:
                 "nutanix_count_storage_container_encrypted",
                 "nutanix_count_storage_container_rf1",
                 "nutanix_count_storage_container_rf2",
-                "nutanix_count_storage_container_rf3"
+                "nutanix_count_storage_container_rf3",
+                "nutanix_count_ngt_installed",
+                "nutanix_count_ngt_enabled",
+                "nutanix_count_ngt_reachable",
+                "nutanix_count_ngt_vss_snapshot_capabale",
             ]
             stats_count += len(key_strings)
             complete_stats_list.update({'prism_central': []})
@@ -187,7 +191,11 @@ class NutanixMetrics:
                 "nutanix_count_disk_ssd_pcie",
                 "nutanix_count_disk_ssd_sata",
                 "nutanix_count_disk_das_sata",
-                "nutanix_count_disk_ssd_mem_nvme"
+                "nutanix_count_disk_ssd_mem_nvme",
+                "nutanix_count_ngt_installed",
+                "nutanix_count_ngt_enabled",
+                "nutanix_count_ngt_reachable",
+                "nutanix_count_ngt_vss_snapshot_capabale",
             ]
             stats_count += len(key_strings)
             for instance_type in ntnx_clustermgmt_instance_type_count:
@@ -420,6 +428,11 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_vdisk_sata"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in vms_list))
             self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in vms_list))
             self.__dict__["nutanix_count_vnic"].labels(entity=prism_central_hostname).set(sum([len(vm.nics) for vm in vms_list]))
+            vms_with_ngt = [vm for vm in vms_list if vm.guest_tools]
+            self.__dict__["nutanix_count_ngt_installed"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_installed is True]))
+            self.__dict__["nutanix_count_ngt_enabled"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_enabled is True]))
+            self.__dict__["nutanix_count_ngt_reachable"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_reachable is True]))
+            self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
             #region cluster
             if not cluster_list:
@@ -527,6 +540,11 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_vdisk_sata"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in cluster_vms_list))
                     self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in cluster_vms_list))
                     self.__dict__["nutanix_count_vnic"].labels(entity=cluster.name).set(sum([len(vm.nics) for vm in cluster_vms_list]))
+                    cluster_vms_with_ngt = [vm for vm in cluster_vms_list if vm.guest_tools]
+                    self.__dict__["nutanix_count_ngt_installed"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_installed is True]))
+                    self.__dict__["nutanix_count_ngt_enabled"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_enabled is True]))
+                    self.__dict__["nutanix_count_ngt_reachable"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_reachable is True]))
+                    self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
             #region host
             if not host_list:
@@ -638,6 +656,11 @@ class NutanixMetrics:
                 self.__dict__["nutanix_count_vdisk_sata"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in host_vms_list))
                 self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in host_vms_list))
                 self.__dict__["nutanix_count_vnic"].labels(entity=host.host_name).set(sum([len(vm.nics) for vm in host_vms_list]))
+                host_vms_with_ngt = [vm for vm in host_vms_list if vm.guest_tools]
+                self.__dict__["nutanix_count_ngt_installed"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_installed is True]))
+                self.__dict__["nutanix_count_ngt_enabled"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_enabled is True]))
+                self.__dict__["nutanix_count_ngt_reachable"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_reachable is True]))
+                self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
             #region disk
             if not disk_list:
