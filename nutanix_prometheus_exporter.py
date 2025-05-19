@@ -123,12 +123,29 @@ class NutanixMetrics:
                 "nutanix_count_ngt_enabled",
                 "nutanix_count_ngt_reachable",
                 "nutanix_count_ngt_vss_snapshot_capabale",
+                "nutanix_count_subnet"
             ]
             stats_count += len(key_strings)
             complete_stats_list.update({'prism_central': []})
             complete_stats_list['prism_central'].append(key_strings)
             unique_pc_key_strings = [
                 "nutanix_count_cluster",
+                "nutanix_count_subnet_overlay",
+                "nutanix_count_vpc",
+                "nutanix_count_subnet_vlan",
+                "nutanix_count_subnet_external",
+                "nutanix_count_subnet_vlan_basic",
+                "nutanix_count_subnet_vlan_advanced",
+                "nutanix_count_bgp_session",
+                "nutanix_count_gateway",
+                "nutanix_count_layer2_stretch",
+                "nutanix_count_load_balancer_session",
+                "nutanix_count_network_controller",
+                "nutanix_count_routing_policy",
+                "nutanix_count_traffic_mirror",
+                "nutanix_count_uplink_bond",
+                "nutanix_count_virtual_switch",
+                "nutanix_count_vpn_connection"
             ]
             stats_count += len(unique_pc_key_strings)
             complete_stats_list['prism_central'].append(unique_pc_key_strings)
@@ -209,7 +226,8 @@ class NutanixMetrics:
                 "nutanix_count_storage_container_encrypted",
                 "nutanix_count_storage_container_rf1",
                 "nutanix_count_storage_container_rf2",
-                "nutanix_count_storage_container_rf3"
+                "nutanix_count_storage_container_rf3",
+                "nutanix_count_subnet"
             ]
             stats_count += len(cluster_unique_key_strings)
             complete_stats_list['clustermgmt']['cluster'].append(cluster_unique_key_strings)
@@ -389,7 +407,7 @@ class NutanixMetrics:
         limit=100
         
         #initialize variables
-        cluster_list, host_list, storage_container_list, disk_list, layer2_stretch_list, load_balancer_sessions_list, traffic_mirrors_list, vpc_list, vpn_connection_list, vms_list, files_server_list, object_store_list, volume_group_list = ([] for i in range(13))
+        cluster_list, host_list, storage_container_list, disk_list, subnet_list, layer2_stretch_list, load_balancer_sessions_list, traffic_mirrors_list, vpc_list, vpn_connection_list, vms_list, files_server_list, object_store_list, volume_group_list = ([] for i in range(14))
 
 
         #region #?prism_central
@@ -456,8 +474,52 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_storage_container_rf2"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 2]))
             self.__dict__["nutanix_count_storage_container_rf3"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 3]))
             #endregion storage_container
+            #region networking
+            networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+
+            subnet_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_subnets',limit=limit,module_entity_api='SubnetsApi')
+            self.__dict__["nutanix_count_subnet"].labels(entity=prism_central_hostname).set(len(subnet_list))
+            self.__dict__["nutanix_count_subnet_vlan"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.subnet_type == 'VLAN']))
+            self.__dict__["nutanix_count_subnet_vlan_basic"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if (subnet.is_advanced_networking is False) and (subnet.subnet_type == 'VLAN')]))
+            self.__dict__["nutanix_count_subnet_vlan_advanced"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if (subnet.is_advanced_networking is True) and (subnet.subnet_type == 'VLAN')]))
+            self.__dict__["nutanix_count_subnet_overlay"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.subnet_type == 'OVERLAY']))
+            self.__dict__["nutanix_count_subnet_external"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.is_external is True]))
+
+            vpc_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpcs',limit=limit,module_entity_api='VpcsApi')
+            self.__dict__["nutanix_count_vpc"].labels(entity=prism_central_hostname).set(len(vpc_list))
+
+            bgp_session_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_bgp_sessions',limit=limit,module_entity_api='BgpSessionsApi')
+            self.__dict__["nutanix_count_bgp_session"].labels(entity=prism_central_hostname).set(len(bgp_session_list))
+
+            gateway_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_gateways',limit=limit,module_entity_api='GatewaysApi')
+            self.__dict__["nutanix_count_gateway"].labels(entity=prism_central_hostname).set(len(gateway_list))
+
+            layer2_stretch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_layer2_stretches',limit=limit,module_entity_api='Layer2StretchesApi')
+            self.__dict__["nutanix_count_layer2_stretch"].labels(entity=prism_central_hostname).set(len(layer2_stretch_list))
+
+            load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
+            self.__dict__["nutanix_count_load_balancer_session"].labels(entity=prism_central_hostname).set(len(load_balancer_sessions_list))
+
+            traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
+            self.__dict__["nutanix_count_traffic_mirror"].labels(entity=prism_central_hostname).set(len(traffic_mirrors_list))
+
+            network_controller_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_network_controllers',limit=limit,module_entity_api='NetworkControllersApi')
+            self.__dict__["nutanix_count_network_controller"].labels(entity=prism_central_hostname).set(len(network_controller_list))
+
+            routing_policy_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_routing_policies',limit=limit,module_entity_api='RoutingPoliciesApi')
+            self.__dict__["nutanix_count_routing_policy"].labels(entity=prism_central_hostname).set(len(routing_policy_list))
             
+            uplink_bond_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_uplink_bonds',limit=limit,module_entity_api='UplinkBondsApi')
+            self.__dict__["nutanix_count_uplink_bond"].labels(entity=prism_central_hostname).set(len(uplink_bond_list))
+
+            virtual_switch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_virtual_switches',limit=limit,module_entity_api='VirtualSwitchesApi')
+            self.__dict__["nutanix_count_virtual_switch"].labels(entity=prism_central_hostname).set(len(virtual_switch_list))
+
+            vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
+            self.__dict__["nutanix_count_vpn_connection"].labels(entity=prism_central_hostname).set(len(vpn_connection_list))
+            #endregion networking
         #endregion #?prism_central
+        
         
         #region #?clustermgmt
         #* initialize variable for API client configuration
@@ -581,6 +643,15 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_disk_das_sata"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'DAS_SATA']))
                     self.__dict__["nutanix_count_disk_ssd_mem_nvme"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'SSD_MEM_NVME']))
             #endregion disk
+            #region networking
+            if not subnet_list:
+                networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+                subnet_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_subnets',limit=limit,module_entity_api='SubnetsApi')
+            for cluster in cluster_list:
+                if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
+                    cluster_subnets_list = [subnet for subnet in subnet_list if subnet.cluster_reference == cluster.ext_id]
+                    self.__dict__["nutanix_count_subnet"].labels(entity=cluster.name).set(len(cluster_subnets_list))
+            #endregion networking
             #endregion count
         
         #endregion #?clusters
@@ -778,11 +849,11 @@ class NutanixMetrics:
         #region #?networking
         if self.networking_metrics:
             #* initialize variable for API client configuration
-            client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
             #region #?layer2 stretch
             if not layer2_stretch_list:
-                layer2_stretch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=client,function='list_layer2_stretches',limit=limit,module_entity_api='Layer2StretchesApi')
+                layer2_stretch_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_layer2_stretches',limit=limit,module_entity_api='Layer2StretchesApi')
 
             #region stats
             #* get metrics for each layer2 stretch
@@ -799,7 +870,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=networking_client,
                             module=ntnx_networking_py_client,
                             entity_api='Layer2StretchesStatsApi',
                             function='get_layer2_stretch_stats',
@@ -823,10 +894,10 @@ class NutanixMetrics:
                 self.__dict__[key].labels(layer2_stretch=entity).set(value)
             #endregion stats
             #endregion #?layer2 stretch
-            
+
             #region #?load balancer sessions
             if not load_balancer_sessions_list:
-                load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
+                load_balancer_sessions_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_load_balancer_sessions',limit=limit,module_entity_api='LoadBalancerSessionsApi')
                 
             #region stats
             #* get metrics for each load balancer sessions
@@ -843,7 +914,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=networking_client,
                             module=ntnx_networking_py_client,
                             entity_api='LoadBalancerSessionStatsApi',
                             function='get_load_balancer_session_stats',
@@ -868,10 +939,10 @@ class NutanixMetrics:
                 self.__dict__[key].labels(load_balancer_session=entity).set(value)
             #endregion stats
             #endregion #?load balancer sessions
-            
+
             #region #?traffic mirror
             if not traffic_mirrors_list:
-                traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
+                traffic_mirrors_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_traffic_mirrors',limit=limit,module_entity_api='TrafficMirrorsApi')
                 
             #region stats
             #* get metrics for each load balancer sessions
@@ -888,7 +959,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=networking_client,
                             module=ntnx_networking_py_client,
                             entity_api='TrafficMirrorStatsApi',
                             function='get_traffic_mirror_stats',
@@ -912,10 +983,10 @@ class NutanixMetrics:
                 self.__dict__[key].labels(traffic_mirror=entity).set(value)
             #endregion stats
             #endregion #?traffic mirror
-            
+
             #region #?vpc external subnets
             if not vpc_list:
-                vpc_list = v4_get_all_entities(module=ntnx_networking_py_client,client=client,function='list_vpcs',limit=limit,module_entity_api='VpcsApi')
+                vpc_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpcs',limit=limit,module_entity_api='VpcsApi')
 
             #region stats
             #* get metrics for each vpc external subnets
@@ -934,7 +1005,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=networking_client,
                             module=ntnx_networking_py_client,
                             entity_api='VpcNsStatsApi',
                             function='get_vpc_ns_stats',
@@ -958,10 +1029,10 @@ class NutanixMetrics:
                 self.__dict__[key].labels(vpc_ns=entity).set(value)
             #endregion stats
             #endregion #?vpc external subnets
-            
+
             #region #?vpn connections
             if not vpn_connection_list:
-                vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
+                vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
                 
             #region stats
             #* get metrics for each vpn connection
@@ -978,7 +1049,7 @@ class NutanixMetrics:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
-                            client=client,
+                            client=networking_client,
                             module=ntnx_networking_py_client,
                             entity_api='VpnConnectionStatsApi',
                             function='get_vpn_connection_stats',
@@ -1002,7 +1073,7 @@ class NutanixMetrics:
                 self.__dict__[key].labels(vpn_connection=entity).set(value)
             #endregion stats
             #endregion #?vpn connections
-        
+
         #endregion #?networking
 
 
@@ -2816,25 +2887,28 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
     response = list_function(_page=0,_limit=1)
     total_available_results=response.metadata.total_available_results
     page_count = math.ceil(total_available_results/limit)
-    with tqdm.tqdm(total=page_count, desc=f"Fetching pages {function} in {module_entity_api}") as progress_bar:
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(
-                    v4_get_entities,
-                    module=module,
-                    entity_api=module_entity_api,
-                    client=client,
-                    function=function,
-                    page=page_number,
-                    limit=limit
-                ) for page_number in range(0, page_count, 1)]
-            for future in as_completed(futures):
-                try:
-                    entities = future.result()
-                    entity_list.extend(entities.data)
-                except Exception as e:
-                    print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                finally:
-                    progress_bar.update(1)
+    if page_count > 0:
+        with tqdm.tqdm(total=page_count, desc=f"Fetching pages {function} in {module_entity_api}") as progress_bar:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(
+                        v4_get_entities,
+                        module=module,
+                        entity_api=module_entity_api,
+                        client=client,
+                        function=function,
+                        page=page_number,
+                        limit=limit
+                    ) for page_number in range(0, page_count, 1)]
+                for future in as_completed(futures):
+                    try:
+                        entities = future.result()
+                        entity_list.extend(entities.data)
+                    except Exception as e:
+                        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                    finally:
+                        progress_bar.update(1)
+    else:
+        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}...{PrintColors.RESET}")
     return entity_list
 
 
