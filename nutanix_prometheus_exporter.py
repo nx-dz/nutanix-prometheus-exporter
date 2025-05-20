@@ -14,6 +14,7 @@
 #region #*IMPORT
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
+from collections import Counter
 import os
 import traceback
 import json
@@ -37,6 +38,8 @@ import ntnx_prism_py_client
 import ntnx_files_py_client
 import ntnx_objects_py_client
 import ntnx_volumes_py_client
+import ntnx_datapolicies_py_client
+import ntnx_dataprotection_py_client
 #endregion #*IMPORT
 
 
@@ -122,7 +125,7 @@ class NutanixMetrics:
                 "nutanix_count_ngt_installed",
                 "nutanix_count_ngt_enabled",
                 "nutanix_count_ngt_reachable",
-                "nutanix_count_ngt_vss_snapshot_capabale",
+                "nutanix_count_ngt_vss_snapshot_capable",
                 "nutanix_count_subnet"
             ]
             stats_count += len(key_strings)
@@ -148,7 +151,22 @@ class NutanixMetrics:
                 "nutanix_count_vpn_connection",
                 "nutanix_count_files_server",
                 "nutanix_count_files_unified_namespace",
-                "nutanix_count_objects_object_stores"
+                "nutanix_count_objects_object_stores",
+                "nutanix_count_protection_policy",
+                "nutanix_count_protection_policy_schedule",
+                "nutanix_count_protection_policy_schedule_crash_consistent",
+                "nutanix_count_protection_policy_schedule_app_consistent",
+                "nutanix_count_protection_policy_schedule_sync",
+                "nutanix_count_protection_policy_schedule_nearsync",
+                "nutanix_count_protection_policy_schedule_async",
+                "nutanix_count_category",
+                "nutanix_count_category_system",
+                "nutanix_count_category_user",
+                "nutanix_count_category_internal",
+                "nutanix_count_category_key",
+                "nutanix_count_dr_protected_entities_sync",
+                "nutanix_count_dr_protected_entities_nearsync",
+                "nutanix_count_dr_protected_entities_async",
             ]
             stats_count += len(unique_pc_key_strings)
             complete_stats_list['prism_central'].append(unique_pc_key_strings)
@@ -215,7 +233,7 @@ class NutanixMetrics:
                 "nutanix_count_ngt_installed",
                 "nutanix_count_ngt_enabled",
                 "nutanix_count_ngt_reachable",
-                "nutanix_count_ngt_vss_snapshot_capabale",
+                "nutanix_count_ngt_vss_snapshot_capable",
             ]
             stats_count += len(key_strings)
             for instance_type in ntnx_clustermgmt_instance_type_count:
@@ -423,14 +441,14 @@ class NutanixMetrics:
                     prism_central_hostname = self.prism
             except:
                 prism_central_hostname = self.prism
-            
+
             #region vg
             if self.volumes_metrics:
                 volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
                 volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
                 self.__dict__["nutanix_count_vg"].labels(entity=prism_central_hostname).set(len(volume_group_list))
             #endregion vg
-            
+
             #region vm
             vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             vms_list = v4_get_all_entities(module=ntnx_vmm_py_client,client=vmm_client,function='list_vms',limit=limit,module_entity_api='VmApi')
@@ -445,30 +463,30 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_list if vm.protection_type == 'RULE_PROTECTED']))
             self.__dict__["nutanix_count_vcpu"].labels(entity=prism_central_hostname).set(sum([(vm.num_sockets * vm.num_cores_per_socket) for vm in vms_list]))
             self.__dict__["nutanix_count_vram_mib"].labels(entity=prism_central_hostname).set(sum([(vm.memory_size_bytes / 1048576) for vm in vms_list]))
-            self.__dict__["nutanix_count_vdisk"].labels(entity=prism_central_hostname).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in vms_list))
-            self.__dict__["nutanix_count_vdisk_ide"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in vms_list))
-            self.__dict__["nutanix_count_vdisk_sata"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in vms_list))
-            self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in vms_list))
-            self.__dict__["nutanix_count_vnic"].labels(entity=prism_central_hostname).set(sum([len(vm.nics) for vm in vms_list]))
+            self.__dict__["nutanix_count_vdisk"].labels(entity=prism_central_hostname).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in vms_list if vm.disks))
+            self.__dict__["nutanix_count_vdisk_ide"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in vms_list if vm.disks))
+            self.__dict__["nutanix_count_vdisk_sata"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in vms_list if vm.disks))
+            self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=prism_central_hostname).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in vms_list if vm.disks))
+            self.__dict__["nutanix_count_vnic"].labels(entity=prism_central_hostname).set(sum([len(vm.nics) for vm in vms_list if vm.nics]))
             vms_with_ngt = [vm for vm in vms_list if vm.guest_tools]
             self.__dict__["nutanix_count_ngt_installed"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_installed is True]))
             self.__dict__["nutanix_count_ngt_enabled"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_enabled is True]))
             self.__dict__["nutanix_count_ngt_reachable"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_reachable is True]))
-            self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
+            self.__dict__["nutanix_count_ngt_vss_snapshot_capable"].labels(entity=prism_central_hostname).set(len([vm for vm in vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True])),
             #endregion vm
-            
+
             #region cluster
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             cluster_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_clusters',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_cluster"].labels(entity=prism_central_hostname).set(len([cluster for cluster in cluster_list if 'PRISM_CENTRAL' not in cluster.config.cluster_function]))
             #endregion cluster
-            
+
             #region host
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             host_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_hosts',limit=limit,module_entity_api='ClustersApi')
             self.__dict__["nutanix_count_node"].labels(entity=prism_central_hostname).set(len(host_list))
             #endregion host
-            
+
             #region storage_container
             clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             storage_container_list = v4_get_all_entities(module=ntnx_clustermgmt_py_client,client=clustermgmt_client,function='list_storage_containers',limit=limit,module_entity_api='StorageContainersApi')
@@ -478,7 +496,7 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_storage_container_rf2"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 2]))
             self.__dict__["nutanix_count_storage_container_rf3"].labels(entity=prism_central_hostname).set(len([storage_container for storage_container in storage_container_list if storage_container.replication_factor == 3]))
             #endregion storage_container
-            
+
             #region networking
             networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
@@ -524,7 +542,7 @@ class NutanixMetrics:
                 vpn_connection_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_vpn_connections',limit=limit,module_entity_api='VpnConnectionsApi')
                 self.__dict__["nutanix_count_vpn_connection"].labels(entity=prism_central_hostname).set(len(vpn_connection_list))
             #endregion networking
-            
+
             #region files
             if self.files_metrics:
                 files_client = v4_init_api_client(module='ntnx_files_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -535,25 +553,58 @@ class NutanixMetrics:
                 unified_namespace_list = v4_get_all_entities(module=ntnx_files_py_client,client=files_client,function='list_unified_namespaces',limit=limit,module_entity_api='UnifiedNamespacesApi')
                 self.__dict__["nutanix_count_files_unified_namespace"].labels(entity=prism_central_hostname).set(len(unified_namespace_list))
             #endregion files
-            
+
             #region object
             if self.object_metrics:
                 objects_client = v4_init_api_client(module='ntnx_objects_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
                 object_store_list = v4_get_all_entities(module=ntnx_objects_py_client,client=objects_client,function='list_objectstores',limit=limit,module_entity_api='ObjectStoresApi')
                 self.__dict__["nutanix_count_objects_object_stores"].labels(entity=prism_central_hostname).set(len(object_store_list))
             #endregion object
-            
-            #region data protection
-            #todo: get list of vms which are protected by a protection policy: what about vgs?
-            #todo: retrieve data protection state for each entity
-            #endregion data protection
-            
+
+            #region categories
+            prism_client = v4_init_api_client(module='ntnx_prism_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            category_list = v4_get_all_entities(module=ntnx_prism_py_client,client=prism_client,function='list_categories',limit=limit,module_entity_api='CategoriesApi')
+            self.__dict__["nutanix_count_category"].labels(entity=prism_central_hostname).set(len(category_list))
+            self.__dict__["nutanix_count_category_system"].labels(entity=prism_central_hostname).set(len([category for category in category_list if category.type == 'SYSTEM']))
+            self.__dict__["nutanix_count_category_user"].labels(entity=prism_central_hostname).set(len([category for category in category_list if category.type == 'USER']))
+            self.__dict__["nutanix_count_category_internal"].labels(entity=prism_central_hostname).set(len([category for category in category_list if category.type == 'INTERNAL']))
+            self.__dict__["nutanix_count_category_key"].labels(entity=prism_central_hostname).set(len((Counter(category.key for category in category_list).keys())))
+            #endregion categories
+
             #region protection policies
-            #todo: get list of protection policies and categorize per rpo (sync, nearsync, async)
+            datapolicies_client = v4_init_api_client(module='ntnx_datapolicies_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            protection_policy_list = v4_get_all_entities(module=ntnx_datapolicies_py_client,client=datapolicies_client,function='list_protection_policies',limit=limit,module_entity_api='ProtectionPoliciesApi')
+            self.__dict__["nutanix_count_protection_policy"].labels(entity=prism_central_hostname).set(len(protection_policy_list))
+            #! from now on we're dividing by 2 because in the API, a replication configuration between 2 locations is in fact a single configuration created by the user
+            self.__dict__["nutanix_count_protection_policy_schedule"].labels(entity=prism_central_hostname).set(sum([math.ceil(len(protection_policy.replication_configurations)/2) for protection_policy in protection_policy_list]))
+            self.__dict__["nutanix_count_protection_policy_schedule_crash_consistent"].labels(entity=prism_central_hostname).set(sum([math.ceil(len([configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_type == 'CRASH_CONSISTENT'])/2) for protection_policy in protection_policy_list]))
+            self.__dict__["nutanix_count_protection_policy_schedule_app_consistent"].labels(entity=prism_central_hostname).set(sum([math.ceil(len([configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_type == 'APPLICATION_CONSISTENT'])/2) for protection_policy in protection_policy_list]))
+            #? sync is where RPO = 0
+            self.__dict__["nutanix_count_protection_policy_schedule_sync"].labels(entity=prism_central_hostname).set(sum([math.ceil(len([configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_objective_time_seconds == 0])/2) for protection_policy in protection_policy_list]))
+            #? nearsync is where RPO > 0 but <= 900
+            self.__dict__["nutanix_count_protection_policy_schedule_nearsync"].labels(entity=prism_central_hostname).set(sum([math.ceil(len([configuration.schedule for configuration in protection_policy.replication_configurations if (configuration.schedule.recovery_point_objective_time_seconds > 0) and (configuration.schedule.recovery_point_objective_time_seconds <= 900)])/2) for protection_policy in protection_policy_list]))
+            #? sync is where RPO > 900
+            self.__dict__["nutanix_count_protection_policy_schedule_async"].labels(entity=prism_central_hostname).set(sum([math.ceil(len([configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_objective_time_seconds > 900])/2) for protection_policy in protection_policy_list]))
+
+            protection_policy_sync_ext_id_list = [protection_policy.ext_id for protection_policy in protection_policy_list if [configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_objective_time_seconds == 0]]
+            protection_policy_nearsync_ext_id_list = [protection_policy.ext_id for protection_policy in protection_policy_list if [configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_objective_time_seconds > 0 and configuration.schedule.recovery_point_objective_time_seconds <= 900]]
+            protection_policy_async_ext_id_list = [protection_policy.ext_id for protection_policy in protection_policy_list if [configuration.schedule for configuration in protection_policy.replication_configurations if configuration.schedule.recovery_point_objective_time_seconds > 900]]
+            count_of_protected_vms_per_policy_ext_id = Counter([vm.protection_policy_state.policy.ext_id for vm in vms_list if vm.protection_policy_state])
+            self.__dict__["nutanix_count_dr_protected_entities_sync"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_sync_ext_id_list]))
+            self.__dict__["nutanix_count_dr_protected_entities_nearsync"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_nearsync_ext_id_list]))
+            self.__dict__["nutanix_count_dr_protected_entities_async"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_async_ext_id_list]))
+
+
             #todo: get list of categories
             #todo: for each category in each protection policy, count protected entities
             #? maybe get entities for data protection state based on protection policies membership: so that you can have state per rpo?
             #endregion protection policies
+
+            #region data protection
+            #todo: get list of vms which are protected by a protection policy: what about vgs?
+            #todo: retrieve data protection state for each entity
+            #endregion data protection
+
         #endregion #?prism_central
 
 
