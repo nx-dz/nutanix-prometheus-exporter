@@ -273,6 +273,8 @@ class NutanixMetrics:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
             cluster_unique_key_strings = [
                 "nutanix_count_vg",
+                "nutanix_count_vg_shared",
+                "nutanix_count_vg_not_shared",
                 "nutanix_count_node",
                 "nutanix_count_storage_container",
                 "nutanix_count_storage_container_encrypted",
@@ -635,7 +637,7 @@ class NutanixMetrics:
             dataprotection_api = ntnx_dataprotection_py_client.ProtectedResourcesApi(api_client=dataprotection_client)
             entity_list=[]
             error_list=[]
-            with tqdm.tqdm(total=len(nutanix_dr_protected_vm_list), desc="Fetching protected resources state") as progress_bar:
+            with tqdm.tqdm(total=len(nutanix_dr_protected_vm_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching protected resources state") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             dataprotection_api.get_protected_resource_by_id,
@@ -679,8 +681,6 @@ class NutanixMetrics:
             #region microseg
             microseg_client = v4_init_api_client(module='ntnx_microseg_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
-            #network_security_rule_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_network_security_policy_rules',limit=limit,module_entity_api='NetworkSecurityPoliciesApi')
-
             network_security_policy_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_network_security_policies',limit=limit,module_entity_api='NetworkSecurityPoliciesApi')
             self.__dict__["nutanix_count_microseg_network_security_policy"].labels(entity=prism_central_hostname).set(len(network_security_policy_list))
             self.__dict__["nutanix_count_microseg_network_security_policy_vlan"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.scope in ['ALL_VLAN']]))
@@ -692,6 +692,44 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_microseg_network_security_policy_isolation"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.type == 'ISOLATION']))
             self.__dict__["nutanix_count_microseg_network_security_policy_application"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.type == 'APPLICATION']))
 
+            #! security policy rules can take minutes to retrieve if there are a lot of security policies
+            """ entity_list=[]
+            error_list=[]
+            with tqdm.tqdm(total=len(network_security_policy_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching network security policy rules") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_all_entities,
+                            module=ntnx_microseg_py_client,
+                            client=microseg_client,
+                            function='list_network_security_policy_rules',
+                            limit=limit,
+                            module_entity_api='NetworkSecurityPoliciesApi',
+                            parent_entity_ext_id = entity.ext_id
+                        ) for entity in network_security_policy_list]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            if hasattr(entities, 'data'):
+                                if isinstance(entities.data, Iterable):
+                                    entity_list.extend(entities.data)
+                                else:
+                                    entity_list.append(entities.data)
+                        except ntnx_dataprotection_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
+                                #raise(e.status)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            for error in error_list:
+                print(error)
+            network_security_policy_rule_list = entity_list
+            self.__dict__["nutanix_count_microseg_network_security_policy_rule"].labels(entity=prism_central_hostname).set(len(network_security_policy_rule_list)) """
+            
             address_group_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_address_groups',limit=limit,module_entity_api='AddressGroupsApi')
             self.__dict__["nutanix_count_microseg_address_group"].labels(entity=prism_central_hostname).set(len(address_group_list))
 
@@ -714,6 +752,7 @@ class NutanixMetrics:
             #* get metrics for each cluster
             cluster_details_list = []
             metrics=[]
+            error_list=[]
             for entity in cluster_list:
                 if 'PRISM_CENTRAL' in entity.config.cluster_function:
                     continue
@@ -722,8 +761,8 @@ class NutanixMetrics:
                     'entity_uuid': entity.ext_id,
                 }
                 cluster_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(cluster_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(cluster_details_list), desc="Fetching cluster metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(cluster_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(cluster_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching cluster metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
@@ -739,11 +778,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_clustermgmt_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -752,6 +802,7 @@ class NutanixMetrics:
             #endregion stats
 
             #region count
+
             #region vg
             if not volume_group_list:
                 volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -760,6 +811,7 @@ class NutanixMetrics:
                 if 'PRISM_CENTRAL' not in cluster.config.cluster_function:
                     self.__dict__["nutanix_count_vg"].labels(entity=cluster.name).set(len([vg for vg in volume_group_list if vg.cluster_reference == cluster.ext_id]))
             #endregion vg
+
             #region vm
             if not vms_list:
                 vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -778,17 +830,18 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_list if vm.protection_type == 'RULE_PROTECTED']))
                     self.__dict__["nutanix_count_vcpu"].labels(entity=cluster.name).set(sum([(vm.num_sockets * vm.num_cores_per_socket) for vm in cluster_vms_list]))
                     self.__dict__["nutanix_count_vram_mib"].labels(entity=cluster.name).set(sum([(vm.memory_size_bytes / 1048576) for vm in cluster_vms_list]))
-                    self.__dict__["nutanix_count_vdisk"].labels(entity=cluster.name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in cluster_vms_list))
-                    self.__dict__["nutanix_count_vdisk_ide"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in cluster_vms_list))
-                    self.__dict__["nutanix_count_vdisk_sata"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in cluster_vms_list))
-                    self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in cluster_vms_list))
-                    self.__dict__["nutanix_count_vnic"].labels(entity=cluster.name).set(sum([len(vm.nics) for vm in cluster_vms_list]))
+                    self.__dict__["nutanix_count_vdisk"].labels(entity=cluster.name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in cluster_vms_list if vm.disks))
+                    self.__dict__["nutanix_count_vdisk_ide"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in cluster_vms_list if vm.disks))
+                    self.__dict__["nutanix_count_vdisk_sata"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in cluster_vms_list if vm.disks))
+                    self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=cluster.name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in cluster_vms_list if vm.disks))
+                    self.__dict__["nutanix_count_vnic"].labels(entity=cluster.name).set(sum([len(vm.nics) for vm in cluster_vms_list if vm.nics]))
                     cluster_vms_with_ngt = [vm for vm in cluster_vms_list if vm.guest_tools]
                     self.__dict__["nutanix_count_ngt_installed"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_installed is True]))
                     self.__dict__["nutanix_count_ngt_enabled"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_enabled is True]))
                     self.__dict__["nutanix_count_ngt_reachable"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_reachable is True]))
-                    self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
+                    self.__dict__["nutanix_count_ngt_vss_snapshot_capable"].labels(entity=cluster.name).set(len([vm for vm in cluster_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
+
             #region host
             if not host_list:
                 clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -798,6 +851,7 @@ class NutanixMetrics:
                     cluster_hosts_list = [host for host in host_list if host.cluster.uuid == cluster.ext_id]
                     self.__dict__["nutanix_count_node"].labels(entity=cluster.name).set(len(cluster_hosts_list))
             #endregion host
+
             #region storage_container
             if not storage_container_list:
                 clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -811,6 +865,7 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_storage_container_rf2"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.replication_factor == 2]))
                     self.__dict__["nutanix_count_storage_container_rf3"].labels(entity=cluster.name).set(len([storage_container for storage_container in cluster_storage_containers_list if storage_container.replication_factor == 3]))
             #endregion storage_container
+
             #region disk
             if not disk_list:
                 clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -824,6 +879,7 @@ class NutanixMetrics:
                     self.__dict__["nutanix_count_disk_das_sata"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'DAS_SATA']))
                     self.__dict__["nutanix_count_disk_ssd_mem_nvme"].labels(entity=cluster.name).set(len([disk for disk in cluster_disk_list if disk.storage_tier == 'SSD_MEM_NVME']))
             #endregion disk
+
             #region networking
             if not subnet_list:
                 networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -833,6 +889,7 @@ class NutanixMetrics:
                     cluster_subnets_list = [subnet for subnet in subnet_list if subnet.cluster_reference == cluster.ext_id]
                     self.__dict__["nutanix_count_subnet"].labels(entity=cluster.name).set(len(cluster_subnets_list))
             #endregion networking
+
             #endregion count
 
         #endregion #?clusters
@@ -846,6 +903,7 @@ class NutanixMetrics:
             #* get metrics for each cluster
             host_details_list = []
             metrics=[]
+            error_list=[]
             for entity in host_list:
                 entity_details = {
                     'entity_name': entity.host_name,
@@ -855,8 +913,8 @@ class NutanixMetrics:
                 #print(entity_details)
                 host_details_list.append(entity_details)
             #print(host_details_list)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(host_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(host_details_list), desc="Fetching hosts metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(host_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(host_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching hosts metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
@@ -872,11 +930,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_clustermgmt_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -885,6 +954,7 @@ class NutanixMetrics:
             #endregion stats
 
             #region count
+
             #region vm
             if not vms_list:
                 vmm_client = v4_init_api_client(module='ntnx_vmm_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -903,17 +973,18 @@ class NutanixMetrics:
                 self.__dict__["nutanix_count_vm_rule_protected"].labels(entity=host.host_name).set(len([vm for vm in host_vms_list if vm.protection_type == 'RULE_PROTECTED']))
                 self.__dict__["nutanix_count_vcpu"].labels(entity=host.host_name).set(sum([(vm.num_sockets * vm.num_cores_per_socket) for vm in host_vms_list]))
                 self.__dict__["nutanix_count_vram_mib"].labels(entity=host.host_name).set(sum([(vm.memory_size_bytes / 1048576) for vm in host_vms_list]))
-                self.__dict__["nutanix_count_vdisk"].labels(entity=host.host_name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in host_vms_list))
-                self.__dict__["nutanix_count_vdisk_ide"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in host_vms_list))
-                self.__dict__["nutanix_count_vdisk_sata"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in host_vms_list))
-                self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in host_vms_list))
-                self.__dict__["nutanix_count_vnic"].labels(entity=host.host_name).set(sum([len(vm.nics) for vm in host_vms_list]))
+                self.__dict__["nutanix_count_vdisk"].labels(entity=host.host_name).set(sum(any(vdisk.backing_info.__class__.__name__ == 'VmDisk' for vdisk in vm.disks) for vm in host_vms_list if vm.disks))
+                self.__dict__["nutanix_count_vdisk_ide"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'IDE') for vdisk in vm.disks) for vm in host_vms_list if vm.disks))
+                self.__dict__["nutanix_count_vdisk_sata"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SATA') for vdisk in vm.disks) for vm in host_vms_list if vm.disks))
+                self.__dict__["nutanix_count_vdisk_scsi"].labels(entity=host.host_name).set(sum(any((vdisk.backing_info.__class__.__name__ == 'VmDisk' and vdisk.disk_address.bus_type == 'SCSI') for vdisk in vm.disks) for vm in host_vms_list if vm.disks))
+                self.__dict__["nutanix_count_vnic"].labels(entity=host.host_name).set(sum([len(vm.nics) for vm in host_vms_list if vm.nics]))
                 host_vms_with_ngt = [vm for vm in host_vms_list if vm.guest_tools]
                 self.__dict__["nutanix_count_ngt_installed"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_installed is True]))
                 self.__dict__["nutanix_count_ngt_enabled"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_enabled is True]))
                 self.__dict__["nutanix_count_ngt_reachable"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_reachable is True]))
-                self.__dict__["nutanix_count_ngt_vss_snapshot_capabale"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
+                self.__dict__["nutanix_count_ngt_vss_snapshot_capable"].labels(entity=host.host_name).set(len([vm for vm in host_vms_with_ngt if vm.guest_tools.is_vss_snapshot_capable is True]))
             #endregion vm
+
             #region disk
             if not disk_list:
                 clustermgmt_client = v4_init_api_client(module='ntnx_clustermgmt_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
@@ -926,6 +997,7 @@ class NutanixMetrics:
                 self.__dict__["nutanix_count_disk_das_sata"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'DAS_SATA']))
                 self.__dict__["nutanix_count_disk_ssd_mem_nvme"].labels(entity=host.host_name).set(len([disk for disk in host_disk_list if disk.storage_tier == 'SSD_MEM_NVME']))
             #endregion disk
+
             #endregion count
         #endregion #?hosts
 
@@ -938,6 +1010,7 @@ class NutanixMetrics:
             #* get metrics for each storage container
             storage_container_details_list = []
             metrics=[]
+            error_list=[]
             for entity in storage_container_list:
                 entity_details = {
                     'entity_name': entity.name,
@@ -945,8 +1018,8 @@ class NutanixMetrics:
                     'parent_name': entity.cluster_name,
                 }
                 storage_container_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(storage_container_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(storage_container_details_list), desc="Fetching storage containers metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(storage_container_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(storage_container_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching storage containers metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
@@ -962,11 +1035,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_clustermgmt_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -988,14 +1072,15 @@ class NutanixMetrics:
             #* get metrics for each disk
             disk_details_list = []
             metrics=[]
+            error_list=[]
             for entity in disk_list:
                 entity_details = {
                     'entity_name': entity.serial_number,
                     'entity_uuid': entity.ext_id,
                 }
                 disk_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(disk_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(disk_details_list), desc="Fetching disks metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(disk_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(disk_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching disks metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
@@ -1011,11 +1096,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_clustermgmt_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -1040,39 +1136,52 @@ class NutanixMetrics:
             #* get metrics for each layer2 stretch
             layer2_stretch_details_list = []
             metrics=[]
+            error_list=[]
             for entity in layer2_stretch_list:
                 entity_details = {
                     'entity_name': entity.name,
                     'entity_uuid': entity.ext_id,
                 }
                 layer2_stretch_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(layer2_stretch_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(layer2_stretch_details_list), desc="Fetching layer2 stretch metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=networking_client,
-                            module=ntnx_networking_py_client,
-                            entity_api='Layer2StretchesStatsApi',
-                            function='get_layer2_stretch_stats',
-                            entity=layer2stretch,
-                            metric_key_prefix='nutanix_networking_layer2_stretch_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for layer2stretch in layer2_stretch_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(layer2_stretch=entity).set(value)
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(layer2_stretch_details_list)} entities...{PrintColors.RESET}")
+            if len(layer2_stretch_details_list) > 0:
+                with tqdm.tqdm(total=len(layer2_stretch_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching layer2 stretch metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=networking_client,
+                                module=ntnx_networking_py_client,
+                                entity_api='Layer2StretchesStatsApi',
+                                function='get_layer2_stretch_stats',
+                                entity=layer2stretch,
+                                metric_key_prefix='nutanix_networking_layer2_stretch_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for layer2stretch in layer2_stretch_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_networking_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(layer2_stretch=entity).set(value)
             #endregion stats
             #endregion #?layer2 stretch
 
@@ -1084,40 +1193,52 @@ class NutanixMetrics:
             #* get metrics for each load balancer sessions
             load_balancer_sessions_details_list = []
             metrics=[]
+            error_list=[]
             for entity in load_balancer_sessions_list:
                 entity_details = {
                     'entity_name': entity.name,
                     'entity_uuid': entity.ext_id,
                 }
                 load_balancer_sessions_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(load_balancer_sessions_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(load_balancer_sessions_details_list), desc="Fetching load balancer sessions metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=networking_client,
-                            module=ntnx_networking_py_client,
-                            entity_api='LoadBalancerSessionStatsApi',
-                            function='get_load_balancer_session_stats',
-                            entity=session,
-                            metric_key_prefix='nutanix_networking_load_balancer_session_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for session in load_balancer_sessions_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            #print(metrics)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(load_balancer_session=entity).set(value)
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(load_balancer_sessions_details_list)} entities...{PrintColors.RESET}")
+            if len(load_balancer_sessions_details_list) > 0:
+                with tqdm.tqdm(total=len(load_balancer_sessions_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching load balancer sessions metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=networking_client,
+                                module=ntnx_networking_py_client,
+                                entity_api='LoadBalancerSessionStatsApi',
+                                function='get_load_balancer_session_stats',
+                                entity=session,
+                                metric_key_prefix='nutanix_networking_load_balancer_session_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for session in load_balancer_sessions_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_networking_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(load_balancer_session=entity).set(value)
             #endregion stats
             #endregion #?load balancer sessions
 
@@ -1129,39 +1250,52 @@ class NutanixMetrics:
             #* get metrics for each load balancer sessions
             traffic_mirrors_details_list = []
             metrics=[]
+            error_list=[]
             for entity in traffic_mirrors_list:
                 entity_details = {
                     'entity_name': entity.name,
                     'entity_uuid': entity.ext_id,
                 }
                 traffic_mirrors_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(traffic_mirrors_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(traffic_mirrors_details_list), desc="Fetching traffic mirrors metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=networking_client,
-                            module=ntnx_networking_py_client,
-                            entity_api='TrafficMirrorStatsApi',
-                            function='get_traffic_mirror_stats',
-                            entity=mirror,
-                            metric_key_prefix='nutanix_networking_traffic_mirror_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for mirror in traffic_mirrors_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(traffic_mirror=entity).set(value)
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(traffic_mirrors_details_list)} entities...{PrintColors.RESET}")
+            if len(traffic_mirrors_details_list) > 0:
+                with tqdm.tqdm(total=len(traffic_mirrors_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching traffic mirrors metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=networking_client,
+                                module=ntnx_networking_py_client,
+                                entity_api='TrafficMirrorStatsApi',
+                                function='get_traffic_mirror_stats',
+                                entity=mirror,
+                                metric_key_prefix='nutanix_networking_traffic_mirror_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for mirror in traffic_mirrors_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_networking_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(traffic_mirror=entity).set(value)
             #endregion stats
             #endregion #?traffic mirror
 
@@ -1173,6 +1307,7 @@ class NutanixMetrics:
             #* get metrics for each vpc external subnets
             vpc_external_network_details_list = []
             metrics=[]
+            error_list=[]
             for entity in vpc_list:
                 for external_subnet in entity.external_subnets:
                     entity_details = {
@@ -1181,33 +1316,45 @@ class NutanixMetrics:
                         'entity_parent_uuid': entity.ext_id,
                     }
                     vpc_external_network_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpc_external_network_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(vpc_external_network_details_list), desc="Fetching VPC External Subnets North/South traffic metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=networking_client,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpcNsStatsApi',
-                            function='get_vpc_ns_stats',
-                            entity=subnet,
-                            metric_key_prefix='nutanix_networking_vpc_ns_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for subnet in vpc_external_network_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(vpc_ns=entity).set(value)
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpc_external_network_details_list)} entities...{PrintColors.RESET}")
+            if len(vpc_external_network_details_list) > 0:
+                with tqdm.tqdm(total=len(vpc_external_network_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching VPC External Subnets North/South traffic metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=networking_client,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpcNsStatsApi',
+                                function='get_vpc_ns_stats',
+                                entity=subnet,
+                                metric_key_prefix='nutanix_networking_vpc_ns_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for subnet in vpc_external_network_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_networking_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(vpc_ns=entity).set(value)
             #endregion stats
             #endregion #?vpc external subnets
 
@@ -1219,39 +1366,52 @@ class NutanixMetrics:
             #* get metrics for each vpn connection
             vpn_connection_details_list = []
             metrics=[]
+            error_list=[]
             for entity in vpn_connection_list:
                 entity_details = {
                     'entity_name': entity.name,
                     'entity_uuid': entity.ext_id,
                 }
                 vpn_connection_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpn_connection_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(vpn_connection_details_list), desc="Fetching VPN Connections metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_entity_stats,
-                            client=networking_client,
-                            module=ntnx_networking_py_client,
-                            entity_api='VpnConnectionStatsApi',
-                            function='get_vpn_connection_stats',
-                            entity=connection,
-                            metric_key_prefix='nutanix_networking_vpn_connection_stats_',
-                            sampling_interval=30,
-                            stat_type='LAST'
-                        ) for connection in vpn_connection_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            metrics.extend(entities)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(vpn_connection=entity).set(value)
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpn_connection_details_list)} entities...{PrintColors.RESET}")
+            if len(vpn_connection_details_list) > 0:
+                with tqdm.tqdm(total=len(vpn_connection_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching VPN Connections metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entity_stats,
+                                client=networking_client,
+                                module=ntnx_networking_py_client,
+                                entity_api='VpnConnectionStatsApi',
+                                function='get_vpn_connection_stats',
+                                entity=connection,
+                                metric_key_prefix='nutanix_networking_vpn_connection_stats_',
+                                sampling_interval=30,
+                                stat_type='LAST'
+                            ) for connection in vpn_connection_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_networking_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(vpn_connection=entity).set(value)
             #endregion stats
             #endregion #?vpn connections
 
@@ -1268,7 +1428,7 @@ class NutanixMetrics:
 
             #region stats
             if (self.vm_list).lower() == 'all':
-                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VM stats...{PrintColors.RESET}")
+                #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Fetching VM stats...{PrintColors.RESET}")
                 start_time = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
                 end_time = (datetime.now(timezone.utc)).isoformat()
                 entity_api = ntnx_vmm_py_client.StatsApi(api_client=vmm_client)
@@ -1276,7 +1436,8 @@ class NutanixMetrics:
                 total_available_results=response.metadata.total_available_results
                 page_count = math.ceil(total_available_results/limit)
                 stats_list=[]
-                with tqdm.tqdm(total=page_count, desc="Fetching vm stats pages") as progress_bar:
+                error_list=[]
+                with tqdm.tqdm(total=page_count, desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching vm stats pages") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_all_vm_stats,
@@ -1291,11 +1452,22 @@ class NutanixMetrics:
                         for future in as_completed(futures):
                             try:
                                 stats = future.result()
-                                stats_list.extend(stats)
+                                if isinstance(stats, Iterable):
+                                    stats_list.extend(stats)
+                                else:
+                                    stats_list.append(stats)
+                            except ntnx_vmm_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
                             except Exception as e:
                                 print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                             finally:
                                 progress_bar.update(1)
+                for error in error_list:
+                    print(error)
                 vm_stats_list = stats_list
                 exclude_list = ['timestamp','_reserved','_object_type','_unknown_fields','ext_id','links', 'container_ext_id', 'tenant_id', 'stat_type', 'cluster', 'hypervisor_type']
                 for vm_stat in vm_stats_list:
@@ -1318,14 +1490,15 @@ class NutanixMetrics:
                 #* get metrics for each vm
                 vm_details_list = []
                 metrics=[]
+                error_list=[]
                 for entity in vm_list_array:
                     entity_details = {
                         'entity_name': entity,
                         'entity_uuid': next(iter([item.ext_id for item in vms_list if item.name == entity])),
                     }
                     vm_details_list.append(entity_details)
-                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vm_details_list)} entities...{PrintColors.RESET}")
-                with tqdm.tqdm(total=len(vm_details_list), desc="Fetching vm metrics") as progress_bar:
+                #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vm_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(vm_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching vm metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_entity_stats,
@@ -1341,11 +1514,22 @@ class NutanixMetrics:
                         for future in as_completed(futures):
                             try:
                                 entities = future.result()
-                                metrics.extend(entities)
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_vmm_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
                             except Exception as e:
                                 print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                             finally:
                                 progress_bar.update(1)
+                for error in error_list:
+                    print(error)
                 for metric in metrics:
                     #print(metric)
                     key, entity, value = metric.split(':')
@@ -1386,9 +1570,10 @@ class NutanixMetrics:
 
             #region stats
             if len(antivirus_server_details_list) > 0:
-                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
-
-                with tqdm.tqdm(total=len(antivirus_server_details_list), desc="Fetching Files Server antivirus metrics") as progress_bar:
+                metrics=[]
+                error_list=[]
+                #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(antivirus_server_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(antivirus_server_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching Files Server antivirus metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_files_analytics_stats,
@@ -1402,11 +1587,22 @@ class NutanixMetrics:
                         for future in as_completed(futures):
                             try:
                                 entities = future.result()
-                                metrics.extend(entities)
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_files_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
                             except Exception as e:
                                 print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                             finally:
                                 progress_bar.update(1)
+                for error in error_list:
+                    print(error)
                 for metric in metrics:
                     #print(metric)
                     key, entity, value = metric.split(':')
@@ -1424,6 +1620,7 @@ class NutanixMetrics:
             #* get metrics for each files antivirus server
             files_server_details_list = []
             metrics=[]
+            error_list=[]
             for entity in files_server_list:
                 entity_details = {
                     'entity_name': entity.name,
@@ -1433,9 +1630,8 @@ class NutanixMetrics:
             #endregion get entities
 
             #region stats
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
-
-            with tqdm.tqdm(total=len(files_server_details_list), desc="Fetching Files Server metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
+            with tqdm.tqdm(total=len(files_server_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching Files Server metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_files_analytics_stats,
@@ -1449,11 +1645,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_files_analytics_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -1467,6 +1674,7 @@ class NutanixMetrics:
             #* get metrics for each mount target
             mount_target_details_list = []
             metrics=[]
+            error_list=[]
             for entity in files_server_list:
                 #get antivirus servers for each file server
                 entity_api = ntnx_files_py_client.MountTargetsApi(api_client=files_client)
@@ -1486,9 +1694,8 @@ class NutanixMetrics:
 
             #region stats
             if mount_target_details_list:
-                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(mount_target_details_list)} entities...{PrintColors.RESET}")
-
-                with tqdm.tqdm(total=len(mount_target_details_list), desc="Fetching Files Server mount target metrics") as progress_bar:
+                #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(mount_target_details_list)} entities...{PrintColors.RESET}")
+                with tqdm.tqdm(total=len(mount_target_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching Files Server mount target metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                                 v4_get_files_analytics_stats,
@@ -1502,11 +1709,22 @@ class NutanixMetrics:
                         for future in as_completed(futures):
                             try:
                                 entities = future.result()
-                                metrics.extend(entities)
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_files_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
                             except Exception as e:
                                 print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                             finally:
                                 progress_bar.update(1)
+                for error in error_list:
+                    print(error)
                 for metric in metrics:
                     #print(metric)
                     key, entity, value = metric.split(':')
@@ -1540,9 +1758,10 @@ class NutanixMetrics:
                 }
                 object_store_details_list.append(entity_details)
             #print(object_store_details_list)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(object_store_details_list)} entities...{PrintColors.RESET}")
-
-            with tqdm.tqdm(total=len(object_store_details_list), desc="Fetching object store metrics") as progress_bar:
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(object_store_details_list)} entities...{PrintColors.RESET}")
+            metrics=[]
+            error_list=[]
+            with tqdm.tqdm(total=len(object_store_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching object store metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_objectstore_stats,
@@ -1558,11 +1777,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_objects_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -1583,15 +1813,16 @@ class NutanixMetrics:
             #region #?volume_group stats
             volume_group_details_list = []
             metrics=[]
+            error_list=[]
             for entity in volume_group_list:
                 entity_details = {
                     'entity_name': entity.name,
                     'entity_uuid': entity.ext_id,
                 }
                 volume_group_details_list.append(entity_details)
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_group_details_list)} entities...{PrintColors.RESET}")
+            #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_group_details_list)} entities...{PrintColors.RESET}")
 
-            with tqdm.tqdm(total=len(volume_group_details_list), desc="Fetching volume group metrics") as progress_bar:
+            with tqdm.tqdm(total=len(volume_group_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching volume group metrics") as progress_bar:
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entity_stats,
@@ -1607,11 +1838,22 @@ class NutanixMetrics:
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            metrics.extend(entities)
+                            if isinstance(entities, Iterable):
+                                metrics.extend(entities)
+                            else:
+                                metrics.append(entities)
+                        except ntnx_volumes_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
+            for error in error_list:
+                print(error)
             for metric in metrics:
                 #print(metric)
                 key, entity, value = metric.split(':')
@@ -1626,13 +1868,14 @@ class NutanixMetrics:
             for entity in volume_group_list:
                 #get volume disks for each volume group
                 entity_list=[]
+                error_list=[]
                 entity_api = ntnx_volumes_py_client.VolumeGroupsApi(api_client=volumes_client)
                 response = entity_api.list_volume_disks_by_volume_group_id(volumeGroupExtId=entity.ext_id,_page=0,_limit=1)
                 total_available_results=response.metadata.total_available_results
                 if total_available_results:
                     page_count = math.ceil(total_available_results/limit)
                 if page_count > 0:
-                    with tqdm.tqdm(total=page_count, desc=f"Fetching pages of Nutanix Volume volume disk entities for volume group {entity.name}") as progress_bar:
+                    with tqdm.tqdm(total=page_count, desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching pages of Nutanix Volume volume disk entities for volume group {entity.name}") as progress_bar:
                         with ThreadPoolExecutor(max_workers=10) as executor:
                             futures = [executor.submit(
                                     entity_api.list_volume_disks_by_volume_group_id,
@@ -1643,11 +1886,23 @@ class NutanixMetrics:
                             for future in as_completed(futures):
                                 try:
                                     entities = future.result()
-                                    entity_list.extend(entities.data)
+                                    if hasattr(entities, 'data'):
+                                        if isinstance(entities.data, Iterable):
+                                            entity_list.extend(entities.data)
+                                        else:
+                                            entity_list.append(entities.data)
+                                except ntnx_volumes_py_client.rest.ApiException as e:
+                                    error_data = json.loads(e.body)
+                                    for error in error_data['data']['error']:
+                                        #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                        error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                        error_list.append(error_message)
                                 except Exception as e:
                                     print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                                 finally:
                                     progress_bar.update(1)
+                    for error in error_list:
+                        print(error)
                     volume_disk_list = entity_list
                 #endregion get entities
 
@@ -1663,9 +1918,10 @@ class NutanixMetrics:
                     volume_disk_details_list.append(entity_details)
 
             if len(volume_disk_details_list) > 0:
-                print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_disk_details_list)} entities...{PrintColors.RESET}")
-
-                with tqdm.tqdm(total=len(volume_disk_details_list), desc="Fetching volume disk metrics") as progress_bar:
+                #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(volume_disk_details_list)} entities...{PrintColors.RESET}")
+                metrics=[]
+                error_list=[]
+                with tqdm.tqdm(total=len(volume_disk_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching volume disk metrics") as progress_bar:
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = [executor.submit(
                             v4_get_entity_stats,
@@ -1681,11 +1937,22 @@ class NutanixMetrics:
                         for future in as_completed(futures):
                             try:
                                 entities = future.result()
-                                metrics.extend(entities)
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_volumes_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
                             except Exception as e:
                                 print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                             finally:
                                 progress_bar.update(1)
+                for error in error_list:
+                    print(error)
                 for metric in metrics:
                     #print(metric)
                     key, entity, value = metric.split(':')
@@ -3031,7 +3298,7 @@ def get_entities_batch(api_server, username, password, offset, entity_type, enti
         return []
 
 
-def v4_get_entities(client,module,entity_api,function,page,limit=50):
+def v4_get_entities(client,module,entity_api,function,page,limit=50,parent_entity_ext_id=None):
     '''v4_get_entities function.
         Args:
             client: a v4 Python SDK client object.
@@ -3045,11 +3312,14 @@ def v4_get_entities(client,module,entity_api,function,page,limit=50):
     entity_api_module = getattr(module, entity_api)
     entity_api = entity_api_module(api_client=client)
     list_function = getattr(entity_api, function)
-    response = list_function(_page=page,_limit=limit)
+    if parent_entity_ext_id is not None:
+        response = list_function(parent_entity_ext_id,_page=page,_limit=limit)
+    else:
+        response = list_function(_page=page,_limit=limit)
     return response
 
 
-def v4_get_all_entities(module,client,function,limit,module_entity_api):
+def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_entity_ext_id=None):
     '''v4_get_all_entities function.
         Args:
             client: a v4 Python SDK client object.
@@ -3063,15 +3333,19 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
     entity_api_module = getattr(module, module_entity_api)
     entity_api = entity_api_module(api_client=client)
     list_function = getattr(entity_api, function)
-    print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Using {function} in {module_entity_api}...{PrintColors.RESET}")
+    """ if parent_entity_ext_id is None:
+        print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Using {function} in {module_entity_api}...{PrintColors.RESET}") """
     entity_list=[]
     error_list=[]
-    response = list_function(_page=0,_limit=1)
+    if parent_entity_ext_id is not None:
+        response = list_function(parent_entity_ext_id,_page=0,_limit=1)
+    else:
+        response = list_function(_page=0,_limit=1)
     total_available_results=response.metadata.total_available_results
     if total_available_results:
         page_count = math.ceil(total_available_results/limit)
         if page_count > 0:
-            with tqdm.tqdm(total=page_count, desc=f"Fetching pages {function} in {module_entity_api}") as progress_bar:
+            if parent_entity_ext_id is not None: 
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(
                             v4_get_entities,
@@ -3080,7 +3354,8 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
                             client=client,
                             function=function,
                             page=page_number,
-                            limit=limit
+                            limit=limit,
+                            parent_entity_ext_id=parent_entity_ext_id
                         ) for page_number in range(0, page_count, 1)]
                     for future in as_completed(futures):
                         try:
@@ -3098,8 +3373,37 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
                                 error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
+            else:
+                with tqdm.tqdm(total=page_count, desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching pages {function} in {module_entity_api}") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_entities,
+                                module=module,
+                                entity_api=module_entity_api,
+                                client=client,
+                                function=function,
+                                page=page_number,
+                                limit=limit,
+                                parent_entity_ext_id=parent_entity_ext_id
+                            ) for page_number in range(0, page_count, 1)]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if hasattr(entities, 'data'):
+                                    if isinstance(entities.data, Iterable):
+                                        entity_list.extend(entities.data)
+                                    else:
+                                        entity_list.append(entities.data)
+                            except ntnx_dataprotection_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
     else:
         print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}...{PrintColors.RESET}")
     for error in error_list:
