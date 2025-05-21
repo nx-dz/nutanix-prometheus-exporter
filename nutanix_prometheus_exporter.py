@@ -13,8 +13,9 @@
 
 #region #*IMPORT
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone, timedelta
 from collections import Counter
+from collections.abc import Iterable
+from datetime import datetime, timezone, timedelta
 import os
 import traceback
 import json
@@ -40,6 +41,7 @@ import ntnx_objects_py_client
 import ntnx_volumes_py_client
 import ntnx_datapolicies_py_client
 import ntnx_dataprotection_py_client
+import ntnx_microseg_py_client
 #endregion #*IMPORT
 
 
@@ -69,6 +71,7 @@ class NutanixMetrics:
                  cluster_metrics='True', hosts_metrics='True', storage_containers_metrics='True',disks_metrics='False', networking_metrics='False', files_metrics='False', object_metrics='False', volumes_metrics='False', ncm_ssp_metrics='False', prism_central_metrics = 'True',
                  vm_list='',
                  show_stats_only=False):
+        #region self.
         self.app_port = app_port
         self.polling_interval_seconds = polling_interval_seconds
         self.api_requests_timeout_seconds = api_requests_timeout_seconds
@@ -90,6 +93,7 @@ class NutanixMetrics:
         self.vm_list = vm_list
         self.show_stats_only = show_stats_only
         self.prism_central_metrics = prism_central_metrics
+        #endregion self.
 
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [INFO] Initializing v4 API metrics...{PrintColors.RESET}")
         stats_count = 0
@@ -100,6 +104,8 @@ class NutanixMetrics:
         if self.prism_central_metrics:
             key_strings = [
                 "nutanix_count_vg",
+                "nutanix_count_vg_shared",
+                "nutanix_count_vg_not_shared",
                 "nutanix_count_vm",
                 "nutanix_count_vm_on",
                 "nutanix_count_vm_off",
@@ -167,6 +173,31 @@ class NutanixMetrics:
                 "nutanix_count_dr_protected_entities_sync",
                 "nutanix_count_dr_protected_entities_nearsync",
                 "nutanix_count_dr_protected_entities_async",
+                "nutanix_count_dr_protected_entities_status_in_sync",
+                "nutanix_count_dr_protected_entities_status_syncing",
+                "nutanix_count_dr_protected_entities_status_out_of_sync",
+                "nutanix_count_dr_recovery_points",
+                "nutanix_count_dr_recovery_points_vm",
+                "nutanix_count_dr_recovery_points_vg",
+                "nutanix_count_dr_recovery_points_crash_consistent",
+                "nutanix_count_dr_recovery_points_application_consistent",
+                "nutanix_count_microseg_network_security_policy",
+                "nutanix_count_microseg_network_security_policy_vlan",
+                "nutanix_count_microseg_network_security_policy_vpc",
+                "nutanix_count_microseg_network_security_policy_save",
+                "nutanix_count_microseg_network_security_policy_monitor",
+                "nutanix_count_microseg_network_security_policy_enforce",
+                "nutanix_count_microseg_network_security_policy_quarantine",
+                "nutanix_count_microseg_network_security_policy_isolation",
+                "nutanix_count_microseg_network_security_policy_application",
+                "nutanix_count_microseg_network_security_policy_rule",
+                "nutanix_count_microseg_network_security_policy_rule_quarantine",
+                "nutanix_count_microseg_network_security_policy_rule_two_env_isolation",
+                "nutanix_count_microseg_network_security_policy_rule_multi_env_isolation",
+                "nutanix_count_microseg_network_security_policy_rule_application",
+                "nutanix_count_microseg_network_security_policy_rule_intra_group",
+                "nutanix_count_microseg_address_group",
+                "nutanix_count_microseg_service_group",
             ]
             stats_count += len(unique_pc_key_strings)
             complete_stats_list['prism_central'].append(unique_pc_key_strings)
@@ -447,6 +478,8 @@ class NutanixMetrics:
                 volumes_client = v4_init_api_client(module='ntnx_volumes_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
                 volume_group_list = v4_get_all_entities(module=ntnx_volumes_py_client,client=volumes_client,function='list_volume_groups',limit=limit,module_entity_api='VolumeGroupsApi')
                 self.__dict__["nutanix_count_vg"].labels(entity=prism_central_hostname).set(len(volume_group_list))
+                self.__dict__["nutanix_count_vg_shared"].labels(entity=prism_central_hostname).set(len([vg for vg in volume_group_list if vg.sharing_status == 'SHARED']))
+                self.__dict__["nutanix_count_vg_not_shared"].labels(entity=prism_central_hostname).set(len([vg for vg in volume_group_list if vg.sharing_status == 'NOT_SHARED']))
             #endregion vg
 
             #region vm
@@ -593,17 +626,78 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_dr_protected_entities_sync"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_sync_ext_id_list]))
             self.__dict__["nutanix_count_dr_protected_entities_nearsync"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_nearsync_ext_id_list]))
             self.__dict__["nutanix_count_dr_protected_entities_async"].labels(entity=prism_central_hostname).set(sum([count_of_protected_vms_per_policy_ext_id[ext_id] for ext_id in protection_policy_async_ext_id_list]))
-
-
-            #todo: get list of categories
-            #todo: for each category in each protection policy, count protected entities
-            #? maybe get entities for data protection state based on protection policies membership: so that you can have state per rpo?
             #endregion protection policies
 
             #region data protection
-            #todo: get list of vms which are protected by a protection policy: what about vgs?
-            #todo: retrieve data protection state for each entity
+            #todo: what about vgs?
+            nutanix_dr_protected_vm_list = [vm for vm in vms_list if vm.protection_policy_state]
+            dataprotection_client = v4_init_api_client(module='ntnx_dataprotection_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+            dataprotection_api = ntnx_dataprotection_py_client.ProtectedResourcesApi(api_client=dataprotection_client)
+            entity_list=[]
+            error_list=[]
+            with tqdm.tqdm(total=len(nutanix_dr_protected_vm_list), desc="Fetching protected resources state") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            dataprotection_api.get_protected_resource_by_id,
+                            extId=entity.ext_id
+                        ) for entity in nutanix_dr_protected_vm_list]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            if hasattr(entities, 'data'):
+                                if isinstance(entities.data, Iterable):
+                                    entity_list.extend(entities.data)
+                                else:
+                                    entity_list.append(entities.data)
+                        except ntnx_dataprotection_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
+                                #raise(e.status)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+            for error in error_list:
+                print(error)
+            protected_resource_list = entity_list
+            #print([protected_resource.replication_states for protected_resource in protected_resource_list])
+            self.__dict__["nutanix_count_dr_protected_entities_status_in_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'IN_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+            self.__dict__["nutanix_count_dr_protected_entities_status_syncing"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'SYNCING']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+            self.__dict__["nutanix_count_dr_protected_entities_status_out_of_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'OUT_OF_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+            
+            recovery_point_list = v4_get_all_entities(module=ntnx_dataprotection_py_client,client=dataprotection_client,function='list_recovery_points',limit=limit,module_entity_api='RecoveryPointsApi')
+            self.__dict__["nutanix_count_dr_recovery_points"].labels(entity=prism_central_hostname).set(len(recovery_point_list))
+            self.__dict__["nutanix_count_dr_recovery_points_vm"].labels(entity=prism_central_hostname).set(sum([len([vm_recovery_point for vm_recovery_point in recovery_point.vm_recovery_points]) for recovery_point in recovery_point_list if recovery_point.vm_recovery_points]))
+            self.__dict__["nutanix_count_dr_recovery_points_vg"].labels(entity=prism_central_hostname).set(sum([len([vg_recovery_point for vg_recovery_point in recovery_point.volume_group_recovery_points]) for recovery_point in recovery_point_list if recovery_point.volume_group_recovery_points]))
+            self.__dict__["nutanix_count_dr_recovery_points_crash_consistent"].labels(entity=prism_central_hostname).set(len([recovery_point for recovery_point in recovery_point_list if recovery_point.recovery_point_type == 'CRASH_CONSISTENT']))
+            self.__dict__["nutanix_count_dr_recovery_points_application_consistent"].labels(entity=prism_central_hostname).set(len([recovery_point for recovery_point in recovery_point_list if recovery_point.recovery_point_type == 'APPLICATION_CONSISTENT']))
             #endregion data protection
+
+            #region microseg
+            microseg_client = v4_init_api_client(module='ntnx_microseg_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
+
+            #network_security_rule_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_network_security_policy_rules',limit=limit,module_entity_api='NetworkSecurityPoliciesApi')
+
+            network_security_policy_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_network_security_policies',limit=limit,module_entity_api='NetworkSecurityPoliciesApi')
+            self.__dict__["nutanix_count_microseg_network_security_policy"].labels(entity=prism_central_hostname).set(len(network_security_policy_list))
+            self.__dict__["nutanix_count_microseg_network_security_policy_vlan"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.scope in ['ALL_VLAN']]))
+            self.__dict__["nutanix_count_microseg_network_security_policy_vpc"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.scope in ['ALL_VPC','VPC_LIST']]))
+            self.__dict__["nutanix_count_microseg_network_security_policy_save"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.state == 'SAVE']))
+            self.__dict__["nutanix_count_microseg_network_security_policy_monitor"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.state == 'MONITOR']))
+            self.__dict__["nutanix_count_microseg_network_security_policy_enforce"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.state == 'ENFORCE']))
+            self.__dict__["nutanix_count_microseg_network_security_policy_quarantine"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.type == 'QUARANTINE']))
+            self.__dict__["nutanix_count_microseg_network_security_policy_isolation"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.type == 'ISOLATION']))
+            self.__dict__["nutanix_count_microseg_network_security_policy_application"].labels(entity=prism_central_hostname).set(len([policy for policy in network_security_policy_list if policy.type == 'APPLICATION']))
+
+            address_group_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_address_groups',limit=limit,module_entity_api='AddressGroupsApi')
+            self.__dict__["nutanix_count_microseg_address_group"].labels(entity=prism_central_hostname).set(len(address_group_list))
+
+            service_group_list = v4_get_all_entities(module=ntnx_microseg_py_client,client=microseg_client,function='list_service_groups',limit=limit,module_entity_api='ServiceGroupsApi')
+            self.__dict__["nutanix_count_microseg_service_group"].labels(entity=prism_central_hostname).set(len(service_group_list))
+            #endregion microseg
 
         #endregion #?prism_central
 
@@ -2971,6 +3065,7 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
     list_function = getattr(entity_api, function)
     print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Using {function} in {module_entity_api}...{PrintColors.RESET}")
     entity_list=[]
+    error_list=[]
     response = list_function(_page=0,_limit=1)
     total_available_results=response.metadata.total_available_results
     if total_available_results:
@@ -2990,13 +3085,25 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api):
                     for future in as_completed(futures):
                         try:
                             entities = future.result()
-                            entity_list.extend(entities.data)
+                            if hasattr(entities, 'data'):
+                                if isinstance(entities.data, Iterable):
+                                    entity_list.extend(entities.data)
+                                else:
+                                    entity_list.append(entities.data)
+                        except ntnx_dataprotection_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
                         except Exception as e:
                             print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
                         finally:
                             progress_bar.update(1)
     else:
         print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}...{PrintColors.RESET}")
+    for error in error_list:
+        print(error)
     return entity_list
 
 
