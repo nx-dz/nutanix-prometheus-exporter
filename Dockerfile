@@ -80,7 +80,8 @@ ENV NCM_SSP_METRICS='False'
 
 #*used when operations mode is v4
 #used to determine if Disks (hardware disks) specific metrics will be generated
-ENV DISKS_METRICS='True'
+#note that this can take quite a long time if you have lots of nodes and disks in your clusters
+ENV DISKS_METRICS='False'
 #used to determine if Advanced Networking and Flow Virtual Networking metrics will be generated
 #(applies to all networking module entities except subnets which are always inlcuded with Prism Central and Cluster metrics)
 ENV NETWORKING_METRICS='True'

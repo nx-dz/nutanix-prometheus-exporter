@@ -51,7 +51,6 @@ import ntnx_datapolicies_py_client
 import ntnx_dataprotection_py_client
 import ntnx_microseg_py_client
 import ntnx_monitoring_py_client
-import ntnx_licensing_py_client
 #endregion #*IMPORT
 
 
@@ -489,8 +488,8 @@ class NutanixMetrics:
             loop_start_time = datetime.now(timezone.utc)
             self.fetch()
             loop_end_time = datetime.now(timezone.utc)
-            print(f"{PrintColors.STEP}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [STEP] Fetching all metrics took {format_timespan(loop_end_time - loop_start_time)} seconds...{PrintColors.RESET}")
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds}!{PrintColors.RESET}")
+            print(f"{PrintColors.STEP}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [STEP] Fetching all metrics took {format_timespan(loop_end_time - loop_start_time)}...{PrintColors.RESET}")
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds} seconds!{PrintColors.RESET}")
             time.sleep(self.polling_interval_seconds)
 
 
@@ -724,38 +723,39 @@ class NutanixMetrics:
             dataprotection_api = ntnx_dataprotection_py_client.ProtectedResourcesApi(api_client=dataprotection_client)
             entity_list=[]
             error_list=[]
-            with tqdm.tqdm(total=len(nutanix_dr_protected_vm_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching protected resources state") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            dataprotection_api.get_protected_resource_by_id,
-                            extId=entity.ext_id
-                        ) for entity in nutanix_dr_protected_vm_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            if hasattr(entities, 'data'):
-                                if isinstance(entities.data, Iterable):
-                                    entity_list.extend(entities.data)
-                                else:
-                                    entity_list.append(entities.data)
-                        except ntnx_dataprotection_py_client.rest.ApiException as e:
-                            error_data = json.loads(e.body)
-                            for error in error_data['data']['error']:
-                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
-                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
-                                error_list.append(error_message)
-                                #raise(e.status)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for error in error_list:
-                print(error)
-            protected_resource_list = entity_list
-            #print([protected_resource.replication_states for protected_resource in protected_resource_list])
-            self.__dict__["nutanix_count_dr_protected_entities_status_in_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'IN_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
-            self.__dict__["nutanix_count_dr_protected_entities_status_syncing"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'SYNCING']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
-            self.__dict__["nutanix_count_dr_protected_entities_status_out_of_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'OUT_OF_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+            if len(nutanix_dr_protected_vm_list) >0:
+                with tqdm.tqdm(total=len(nutanix_dr_protected_vm_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching protected resources state") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                dataprotection_api.get_protected_resource_by_id,
+                                extId=entity.ext_id
+                            ) for entity in nutanix_dr_protected_vm_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if hasattr(entities, 'data'):
+                                    if isinstance(entities.data, Iterable):
+                                        entity_list.extend(entities.data)
+                                    else:
+                                        entity_list.append(entities.data)
+                            except ntnx_dataprotection_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                                    #raise(e.status)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                protected_resource_list = entity_list
+                #print([protected_resource.replication_states for protected_resource in protected_resource_list])
+                self.__dict__["nutanix_count_dr_protected_entities_status_in_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'IN_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+                self.__dict__["nutanix_count_dr_protected_entities_status_syncing"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'SYNCING']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
+                self.__dict__["nutanix_count_dr_protected_entities_status_out_of_sync"].labels(entity=prism_central_hostname).set(sum([len([replication_state for replication_state in protected_resource.replication_states if replication_state.replication_status == 'OUT_OF_SYNC']) for protected_resource in protected_resource_list if protected_resource.replication_states]))
             
             recovery_point_list = v4_get_all_entities(module=ntnx_dataprotection_py_client,client=dataprotection_client,function='list_recovery_points',limit=limit,module_entity_api='RecoveryPointsApi')
             self.__dict__["nutanix_count_dr_recovery_points"].labels(entity=prism_central_hostname).set(len(recovery_point_list))
@@ -1720,41 +1720,42 @@ class NutanixMetrics:
 
             #region stats
             #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(files_server_details_list)} entities...{PrintColors.RESET}")
-            with tqdm.tqdm(total=len(files_server_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching Files Server metrics") as progress_bar:
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(
-                            v4_get_files_analytics_stats,
-                            client=files_client,
-                            module=ntnx_files_py_client,
-                            entity_api='AnalyticsApi',
-                            function='get_file_server_stats',
-                            entity=file_server,
-                            metric_key_prefix='nutanix_files_file_server_stats_'
-                        ) for file_server in files_server_details_list]
-                    for future in as_completed(futures):
-                        try:
-                            entities = future.result()
-                            if isinstance(entities, Iterable):
-                                metrics.extend(entities)
-                            else:
-                                metrics.append(entities)
-                        except ntnx_files_analytics_py_client.rest.ApiException as e:
-                            error_data = json.loads(e.body)
-                            for error in error_data['data']['error']:
-                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
-                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
-                                error_list.append(error_message)
-                        except Exception as e:
-                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
-                        finally:
-                            progress_bar.update(1)
-            for error in error_list:
-                print(error)
-            for metric in metrics:
-                #print(metric)
-                key, entity, value = metric.split(':')
-                #print(f"key: {key}, entity: {entity}, value: {value}")
-                self.__dict__[key].labels(file_server=entity).set(value)
+            if len(files_server_details_list) >0:
+                with tqdm.tqdm(total=len(files_server_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching Files Server metrics") as progress_bar:
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = [executor.submit(
+                                v4_get_files_analytics_stats,
+                                client=files_client,
+                                module=ntnx_files_py_client,
+                                entity_api='AnalyticsApi',
+                                function='get_file_server_stats',
+                                entity=file_server,
+                                metric_key_prefix='nutanix_files_file_server_stats_'
+                            ) for file_server in files_server_details_list]
+                        for future in as_completed(futures):
+                            try:
+                                entities = future.result()
+                                if isinstance(entities, Iterable):
+                                    metrics.extend(entities)
+                                else:
+                                    metrics.append(entities)
+                            except ntnx_files_analytics_py_client.rest.ApiException as e:
+                                error_data = json.loads(e.body)
+                                for error in error_data['data']['error']:
+                                    #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                    error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                    error_list.append(error_message)
+                            except Exception as e:
+                                print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                            finally:
+                                progress_bar.update(1)
+                for error in error_list:
+                    print(error)
+                for metric in metrics:
+                    #print(metric)
+                    key, entity, value = metric.split(':')
+                    #print(f"key: {key}, entity: {entity}, value: {value}")
+                    self.__dict__[key].labels(file_server=entity).set(value)
             #endregion stats
             #endregion #?file_server stats
 
