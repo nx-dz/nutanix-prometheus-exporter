@@ -10,11 +10,14 @@
         csv file.
 """
 
-#todo: add filters for entities with large quantities of pages (alerts, audits, tasks, events)
+#todo: add concurrent processing for volume disk entities retrieval
 #todo: replace tqdm stats collection with function
 #todo: create function for stats creation where possible
 #todo: make sure all response = api calls are done in try/except with proper exception handling
 #todo: add code for handling API rate limit errors
+#todo: add licensing
+#todo: add lcm
+#todo: add iam
 
 #region #*IMPORT
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -487,7 +490,7 @@ class NutanixMetrics:
             self.fetch()
             loop_end_time = datetime.now(timezone.utc)
             print(f"{PrintColors.STEP}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [STEP] Fetching all metrics took {format_timespan(loop_end_time - loop_start_time)} seconds...{PrintColors.RESET}")
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds} seconds!{PrintColors.RESET}")
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds}!{PrintColors.RESET}")
             time.sleep(self.polling_interval_seconds)
 
 
@@ -1394,13 +1397,14 @@ class NutanixMetrics:
             metrics=[]
             error_list=[]
             for entity in vpc_list:
-                for external_subnet in entity.external_subnets:
-                    entity_details = {
-                        'entity_name': entity.name,
-                        'entity_uuid': external_subnet.subnet_reference,
-                        'entity_parent_uuid': entity.ext_id,
-                    }
-                    vpc_external_network_details_list.append(entity_details)
+                if entity.external_subnets:
+                    for external_subnet in entity.external_subnets:
+                        entity_details = {
+                            'entity_name': entity.name,
+                            'entity_uuid': external_subnet.subnet_reference,
+                            'entity_parent_uuid': entity.ext_id,
+                        }
+                        vpc_external_network_details_list.append(entity_details)
             #print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Processing {len(vpc_external_network_details_list)} entities...{PrintColors.RESET}")
             if len(vpc_external_network_details_list) > 0:
                 with tqdm.tqdm(total=len(vpc_external_network_details_list), desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching VPC External Subnets North/South traffic metrics") as progress_bar:
