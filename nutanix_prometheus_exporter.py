@@ -647,6 +647,17 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_monitoring_alert"].labels(entity=prism_central_hostname).set(len(alert_list))
             self.__dict__["nutanix_count_monitoring_alert_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_resolved is True]))
             self.__dict__["nutanix_count_monitoring_alert_not_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_resolved is not True]))
+            self.__dict__["nutanix_count_monitoring_alert_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_acknowledged is True]))
+            self.__dict__["nutanix_count_monitoring_alert_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_acknowledged is not True]))
+            self.__dict__["nutanix_count_monitoring_alert_info"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.severity == 'INFO']))
+            self.__dict__["nutanix_count_monitoring_alert_warning"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.severity == 'WARNING']))
+            self.__dict__["nutanix_count_monitoring_alert_critical"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.severity == 'CRITICAL']))
+            self.__dict__["nutanix_count_monitoring_alert_info_not_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'INFO' and alert.is_resolved is not True)]))
+            self.__dict__["nutanix_count_monitoring_alert_warning_not_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'WARNING' and alert.is_resolved is not True)]))
+            self.__dict__["nutanix_count_monitoring_alert_critical_not_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'CRITICAL' and alert.is_resolved is not True)]))
+            self.__dict__["nutanix_count_monitoring_alert_info_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'INFO' and alert.is_acknowledged is not True)]))
+            self.__dict__["nutanix_count_monitoring_alert_warning_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'WARNING' and alert.is_acknowledged is not True)]))
+            self.__dict__["nutanix_count_monitoring_alert_critical_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'CRITICAL' and alert.is_acknowledged is not True)]))
             #endregion alert
 
             #endregion monitoring
