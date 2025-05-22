@@ -9,3 +9,7 @@ ntnx_prism_py_client
 ntnx_files_py_client
 ntnx_objects_py_client
 ntnx_volumes_py_client
+ntnx_datapolicies_py_client
+ntnx_dataprotection_py_client
+ntnx_microseg_py_client
+ntnx_monitoring_py_client
