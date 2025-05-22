@@ -14,3 +14,5 @@ ntnx_dataprotection_py_client
 ntnx_microseg_py_client
 ntnx_monitoring_py_client
 humanfriendly
+urllib3
+ipaddress

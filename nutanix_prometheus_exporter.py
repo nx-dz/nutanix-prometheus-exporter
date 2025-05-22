@@ -488,8 +488,8 @@ class NutanixMetrics:
             loop_start_time = datetime.now(timezone.utc)
             self.fetch()
             loop_end_time = datetime.now(timezone.utc)
-            print(f"{PrintColors.STEP}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [STEP] Fetching all metrics took {format_timespan(loop_end_time - loop_start_time)}...{PrintColors.RESET}")
-            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds} seconds!{PrintColors.RESET}")
+            print(f"{PrintColors.STEP}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [STEP] Fetching all metrics took {format_timespan(loop_end_time - loop_start_time)}!{PrintColors.RESET}")
+            print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [INFO] Waiting for {self.polling_interval_seconds} seconds...{PrintColors.RESET}")
             time.sleep(self.polling_interval_seconds)
 
 
