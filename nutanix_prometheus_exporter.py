@@ -10,6 +10,11 @@
         csv file.
 """
 
+#todo: add filters for entities with large quantities of pages (alerts, audits, tasks, events)
+#todo: replace tqdm stats collection with function
+#todo: create function for stats creation where possible
+#todo: make sure all response = api calls are done in try/except with proper exception handling
+#todo: add code for handling API rate limit errors
 
 #region #*IMPORT
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -46,6 +51,163 @@ import ntnx_monitoring_py_client
 #endregion #*IMPORT
 
 
+#region #*GLOBAL VAR CONFIG
+unique_pc_count_metrics = [
+    "nutanix_count_cluster",
+    "nutanix_count_subnet_overlay",
+    "nutanix_count_vpc",
+    "nutanix_count_subnet_vlan",
+    "nutanix_count_subnet_external",
+    "nutanix_count_subnet_vlan_basic",
+    "nutanix_count_subnet_vlan_advanced",
+    "nutanix_count_bgp_session",
+    "nutanix_count_gateway",
+    "nutanix_count_layer2_stretch",
+    "nutanix_count_load_balancer_session",
+    "nutanix_count_network_controller",
+    "nutanix_count_routing_policy",
+    "nutanix_count_traffic_mirror",
+    "nutanix_count_uplink_bond",
+    "nutanix_count_virtual_switch",
+    "nutanix_count_vpn_connection",
+    "nutanix_count_files_server",
+    "nutanix_count_files_unified_namespace",
+    "nutanix_count_objects_object_stores",
+    "nutanix_count_protection_policy",
+    "nutanix_count_protection_policy_schedule",
+    "nutanix_count_protection_policy_schedule_crash_consistent",
+    "nutanix_count_protection_policy_schedule_app_consistent",
+    "nutanix_count_protection_policy_schedule_sync",
+    "nutanix_count_protection_policy_schedule_nearsync",
+    "nutanix_count_protection_policy_schedule_async",
+    "nutanix_count_category",
+    "nutanix_count_category_system",
+    "nutanix_count_category_user",
+    "nutanix_count_category_internal",
+    "nutanix_count_category_key",
+    "nutanix_count_dr_protected_entities_sync",
+    "nutanix_count_dr_protected_entities_nearsync",
+    "nutanix_count_dr_protected_entities_async",
+    "nutanix_count_dr_protected_entities_status_in_sync",
+    "nutanix_count_dr_protected_entities_status_syncing",
+    "nutanix_count_dr_protected_entities_status_out_of_sync",
+    "nutanix_count_dr_recovery_points",
+    "nutanix_count_dr_recovery_points_vm",
+    "nutanix_count_dr_recovery_points_vg",
+    "nutanix_count_dr_recovery_points_crash_consistent",
+    "nutanix_count_dr_recovery_points_application_consistent",
+    "nutanix_count_microseg_network_security_policy",
+    "nutanix_count_microseg_network_security_policy_vlan",
+    "nutanix_count_microseg_network_security_policy_vpc",
+    "nutanix_count_microseg_network_security_policy_save",
+    "nutanix_count_microseg_network_security_policy_monitor",
+    "nutanix_count_microseg_network_security_policy_enforce",
+    "nutanix_count_microseg_network_security_policy_quarantine",
+    "nutanix_count_microseg_network_security_policy_isolation",
+    "nutanix_count_microseg_network_security_policy_application",
+    "nutanix_count_microseg_address_group",
+    "nutanix_count_microseg_service_group",
+    "nutanix_count_task",
+    "nutanix_count_task_queued",
+    "nutanix_count_task_running",
+    "nutanix_count_task_canceling",
+    "nutanix_count_task_succeeded",
+    "nutanix_count_task_failed",
+    "nutanix_count_task_canceled",
+    "nutanix_count_task_suspended",
+    "nutanix_count_monitoring_alert",
+    "nutanix_count_monitoring_alert_resolved",
+    "nutanix_count_monitoring_alert_not_resolved",
+    "nutanix_count_monitoring_alert_acknowledged",
+    "nutanix_count_monitoring_alert_not_acknowledged",
+    "nutanix_count_monitoring_alert_info",
+    "nutanix_count_monitoring_alert_warning",
+    "nutanix_count_monitoring_alert_critical",
+    "nutanix_count_monitoring_alert_info_not_resolved",
+    "nutanix_count_monitoring_alert_warning_not_resolved",
+    "nutanix_count_monitoring_alert_critical_not_resolved",
+    "nutanix_count_monitoring_alert_info_not_acknowledged",
+    "nutanix_count_monitoring_alert_warning_not_acknowledged",
+    "nutanix_count_monitoring_alert_critical_not_acknowledged",
+    "nutanix_count_monitoring_audit",
+    "nutanix_count_monitoring_audit_succeeded",
+    "nutanix_count_monitoring_audit_failed",
+    "nutanix_count_monitoring_audit_aborted",
+]
+shared_pc_cluster_count_metrics = [
+    "nutanix_count_vg",
+    "nutanix_count_vg_shared",
+    "nutanix_count_vg_not_shared",
+    "nutanix_count_vm",
+    "nutanix_count_vm_on",
+    "nutanix_count_vm_off",
+    "nutanix_count_vm_boot_legacy",
+    "nutanix_count_vm_boot_uefi",
+    "nutanix_count_vm_gpus",
+    "nutanix_count_vm_unprotected",
+    "nutanix_count_vm_pd_protected",
+    "nutanix_count_vm_rule_protected",
+    "nutanix_count_vcpu",
+    "nutanix_count_vram_mib",
+    "nutanix_count_vdisk",
+    "nutanix_count_vdisk_ide",
+    "nutanix_count_vdisk_sata",
+    "nutanix_count_vdisk_scsi",
+    "nutanix_count_vnic",
+    "nutanix_count_node",
+    "nutanix_count_storage_container",
+    "nutanix_count_storage_container_encrypted",
+    "nutanix_count_storage_container_rf1",
+    "nutanix_count_storage_container_rf2",
+    "nutanix_count_storage_container_rf3",
+    "nutanix_count_ngt_installed",
+    "nutanix_count_ngt_enabled",
+    "nutanix_count_ngt_reachable",
+    "nutanix_count_ngt_vss_snapshot_capable",
+    "nutanix_count_subnet"
+]
+shared_cluster_host_count_metrics = [
+    "nutanix_count_vm",
+    "nutanix_count_vm_on",
+    "nutanix_count_vm_off",
+    "nutanix_count_vm_boot_legacy",
+    "nutanix_count_vm_boot_uefi",
+    "nutanix_count_vm_gpus",
+    "nutanix_count_vm_unprotected",
+    "nutanix_count_vm_pd_protected",
+    "nutanix_count_vm_rule_protected",
+    "nutanix_count_vcpu",
+    "nutanix_count_vram_mib",
+    "nutanix_count_vdisk",
+    "nutanix_count_vdisk_ide",
+    "nutanix_count_vdisk_sata",
+    "nutanix_count_vdisk_scsi",
+    "nutanix_count_vnic",
+    "nutanix_count_disk",
+    "nutanix_count_disk_ssd_pcie",
+    "nutanix_count_disk_ssd_sata",
+    "nutanix_count_disk_das_sata",
+    "nutanix_count_disk_ssd_mem_nvme",
+    "nutanix_count_ngt_installed",
+    "nutanix_count_ngt_enabled",
+    "nutanix_count_ngt_reachable",
+    "nutanix_count_ngt_vss_snapshot_capable",
+]
+unique_cluster_count_metrics = [
+    "nutanix_count_vg",
+    "nutanix_count_vg_shared",
+    "nutanix_count_vg_not_shared",
+    "nutanix_count_node",
+    "nutanix_count_storage_container",
+    "nutanix_count_storage_container_encrypted",
+    "nutanix_count_storage_container_rf1",
+    "nutanix_count_storage_container_rf2",
+    "nutanix_count_storage_container_rf3",
+    "nutanix_count_subnet"
+]
+#endregion
+
+
 #region #*CLASS
 class PrintColors:
     """ used in print statements for colored output
@@ -68,6 +230,7 @@ class NutanixMetrics:
 
     def __init__(self,
                  app_port=9440, polling_interval_seconds=30, api_requests_timeout_seconds=30, api_requests_retries=5, api_sleep_seconds_between_retries=15,
+                 unique_pc_count_metrics=unique_pc_count_metrics,shared_pc_cluster_count_metrics=shared_pc_cluster_count_metrics,shared_cluster_host_count_metrics=shared_cluster_host_count_metrics,unique_cluster_count_metrics=unique_cluster_count_metrics,
                  prism='127.0.0.1', user='admin', pwd='Nutanix/4u', prism_secure=False,
                  cluster_metrics=True, hosts_metrics=True, storage_containers_metrics=True,disks_metrics=False, networking_metrics=False, files_metrics=False, object_metrics=False, volumes_metrics=False, ncm_ssp_metrics=False, prism_central_metrics = False, microseg_metrics = False,
                  vm_list='',
@@ -95,6 +258,10 @@ class NutanixMetrics:
         self.show_stats_only = show_stats_only
         self.prism_central_metrics = prism_central_metrics
         self.microseg_metrics = microseg_metrics
+        self.unique_pc_count_metrics = unique_pc_count_metrics
+        self.shared_pc_cluster_count_metrics = shared_pc_cluster_count_metrics
+        self.shared_cluster_host_count_metrics = shared_cluster_host_count_metrics
+        self.unique_cluster_count_metrics = unique_cluster_count_metrics
         #endregion self.
 
         print(f"{PrintColors.OK}{(datetime.now()).strftime('%Y-%m-%d_%H:%M:%S')} [INFO] Initializing v4 API metrics...{PrintColors.RESET}")
@@ -104,125 +271,15 @@ class NutanixMetrics:
 
         #region #?prism_central
         if self.prism_central_metrics:
-            key_strings = [
-                "nutanix_count_vg",
-                "nutanix_count_vg_shared",
-                "nutanix_count_vg_not_shared",
-                "nutanix_count_vm",
-                "nutanix_count_vm_on",
-                "nutanix_count_vm_off",
-                "nutanix_count_vm_boot_legacy",
-                "nutanix_count_vm_boot_uefi",
-                "nutanix_count_vm_gpus",
-                "nutanix_count_vm_unprotected",
-                "nutanix_count_vm_pd_protected",
-                "nutanix_count_vm_rule_protected",
-                "nutanix_count_vcpu",
-                "nutanix_count_vram_mib",
-                "nutanix_count_vdisk",
-                "nutanix_count_vdisk_ide",
-                "nutanix_count_vdisk_sata",
-                "nutanix_count_vdisk_scsi",
-                "nutanix_count_vnic",
-                "nutanix_count_node",
-                "nutanix_count_storage_container",
-                "nutanix_count_storage_container_encrypted",
-                "nutanix_count_storage_container_rf1",
-                "nutanix_count_storage_container_rf2",
-                "nutanix_count_storage_container_rf3",
-                "nutanix_count_ngt_installed",
-                "nutanix_count_ngt_enabled",
-                "nutanix_count_ngt_reachable",
-                "nutanix_count_ngt_vss_snapshot_capable",
-                "nutanix_count_subnet"
-            ]
-            stats_count += len(key_strings)
+            stats_count += len(self.shared_pc_cluster_count_metrics)
             complete_stats_list.update({'prism_central': []})
-            complete_stats_list['prism_central'].append(key_strings)
-            unique_pc_key_strings = [
-                "nutanix_count_cluster",
-                "nutanix_count_subnet_overlay",
-                "nutanix_count_vpc",
-                "nutanix_count_subnet_vlan",
-                "nutanix_count_subnet_external",
-                "nutanix_count_subnet_vlan_basic",
-                "nutanix_count_subnet_vlan_advanced",
-                "nutanix_count_bgp_session",
-                "nutanix_count_gateway",
-                "nutanix_count_layer2_stretch",
-                "nutanix_count_load_balancer_session",
-                "nutanix_count_network_controller",
-                "nutanix_count_routing_policy",
-                "nutanix_count_traffic_mirror",
-                "nutanix_count_uplink_bond",
-                "nutanix_count_virtual_switch",
-                "nutanix_count_vpn_connection",
-                "nutanix_count_files_server",
-                "nutanix_count_files_unified_namespace",
-                "nutanix_count_objects_object_stores",
-                "nutanix_count_protection_policy",
-                "nutanix_count_protection_policy_schedule",
-                "nutanix_count_protection_policy_schedule_crash_consistent",
-                "nutanix_count_protection_policy_schedule_app_consistent",
-                "nutanix_count_protection_policy_schedule_sync",
-                "nutanix_count_protection_policy_schedule_nearsync",
-                "nutanix_count_protection_policy_schedule_async",
-                "nutanix_count_category",
-                "nutanix_count_category_system",
-                "nutanix_count_category_user",
-                "nutanix_count_category_internal",
-                "nutanix_count_category_key",
-                "nutanix_count_dr_protected_entities_sync",
-                "nutanix_count_dr_protected_entities_nearsync",
-                "nutanix_count_dr_protected_entities_async",
-                "nutanix_count_dr_protected_entities_status_in_sync",
-                "nutanix_count_dr_protected_entities_status_syncing",
-                "nutanix_count_dr_protected_entities_status_out_of_sync",
-                "nutanix_count_dr_recovery_points",
-                "nutanix_count_dr_recovery_points_vm",
-                "nutanix_count_dr_recovery_points_vg",
-                "nutanix_count_dr_recovery_points_crash_consistent",
-                "nutanix_count_dr_recovery_points_application_consistent",
-                "nutanix_count_microseg_network_security_policy",
-                "nutanix_count_microseg_network_security_policy_vlan",
-                "nutanix_count_microseg_network_security_policy_vpc",
-                "nutanix_count_microseg_network_security_policy_save",
-                "nutanix_count_microseg_network_security_policy_monitor",
-                "nutanix_count_microseg_network_security_policy_enforce",
-                "nutanix_count_microseg_network_security_policy_quarantine",
-                "nutanix_count_microseg_network_security_policy_isolation",
-                "nutanix_count_microseg_network_security_policy_application",
-                "nutanix_count_microseg_address_group",
-                "nutanix_count_microseg_service_group",
-                "nutanix_count_task",
-                "nutanix_count_task_queued",
-                "nutanix_count_task_running",
-                "nutanix_count_task_canceling",
-                "nutanix_count_task_succeeded",
-                "nutanix_count_task_failed",
-                "nutanix_count_task_canceled",
-                "nutanix_count_task_suspended",
-                "nutanix_count_monitoring_alert",
-                "nutanix_count_monitoring_alert_resolved",
-                "nutanix_count_monitoring_alert_not_resolved",
-                "nutanix_count_monitoring_alert_acknowledged",
-                "nutanix_count_monitoring_alert_not_acknowledged",
-                "nutanix_count_monitoring_alert_info",
-                "nutanix_count_monitoring_alert_warning",
-                "nutanix_count_monitoring_alert_critical",
-                "nutanix_count_monitoring_alert_info_not_resolved",
-                "nutanix_count_monitoring_alert_warning_not_resolved",
-                "nutanix_count_monitoring_alert_critical_not_resolved",
-                "nutanix_count_monitoring_alert_info_not_acknowledged",
-                "nutanix_count_monitoring_alert_warning_not_acknowledged",
-                "nutanix_count_monitoring_alert_critical_not_acknowledged",
-            ]
-            stats_count += len(unique_pc_key_strings)
-            complete_stats_list['prism_central'].append(unique_pc_key_strings)
-            for key_string in unique_pc_key_strings:
+            complete_stats_list['prism_central'].append(self.shared_pc_cluster_count_metrics)
+            stats_count += len(self.unique_pc_count_metrics)
+            complete_stats_list['prism_central'].append(unique_pc_count_metrics)
+            for key_string in self.unique_pc_count_metrics:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
         if self.prism_central_metrics and not self.cluster_metrics:
-            for key_string in key_strings:
+            for key_string in self.shared_pc_cluster_count_metrics:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
         #endregion #?prism_central
 
@@ -257,53 +314,14 @@ class NutanixMetrics:
 
             #region count
             ntnx_clustermgmt_instance_type_count = ['host','cluster']
-            key_strings = [
-                "nutanix_count_vm",
-                "nutanix_count_vm_on",
-                "nutanix_count_vm_off",
-                "nutanix_count_vm_boot_legacy",
-                "nutanix_count_vm_boot_uefi",
-                "nutanix_count_vm_gpus",
-                "nutanix_count_vm_unprotected",
-                "nutanix_count_vm_pd_protected",
-                "nutanix_count_vm_rule_protected",
-                "nutanix_count_vcpu",
-                "nutanix_count_vram_mib",
-                "nutanix_count_vdisk",
-                "nutanix_count_vdisk_ide",
-                "nutanix_count_vdisk_sata",
-                "nutanix_count_vdisk_scsi",
-                "nutanix_count_vnic",
-                "nutanix_count_disk",
-                "nutanix_count_disk_ssd_pcie",
-                "nutanix_count_disk_ssd_sata",
-                "nutanix_count_disk_das_sata",
-                "nutanix_count_disk_ssd_mem_nvme",
-                "nutanix_count_ngt_installed",
-                "nutanix_count_ngt_enabled",
-                "nutanix_count_ngt_reachable",
-                "nutanix_count_ngt_vss_snapshot_capable",
-            ]
-            stats_count += len(key_strings)
+            stats_count += len(self.shared_cluster_host_count_metrics)
             for instance_type in ntnx_clustermgmt_instance_type_count:
-                complete_stats_list['clustermgmt'][instance_type].append(key_strings)
-            for key_string in key_strings:
+                complete_stats_list['clustermgmt'][instance_type].append(self.shared_cluster_host_count_metrics)
+            for key_string in self.shared_cluster_host_count_metrics:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
-            cluster_unique_key_strings = [
-                "nutanix_count_vg",
-                "nutanix_count_vg_shared",
-                "nutanix_count_vg_not_shared",
-                "nutanix_count_node",
-                "nutanix_count_storage_container",
-                "nutanix_count_storage_container_encrypted",
-                "nutanix_count_storage_container_rf1",
-                "nutanix_count_storage_container_rf2",
-                "nutanix_count_storage_container_rf3",
-                "nutanix_count_subnet"
-            ]
-            stats_count += len(cluster_unique_key_strings)
-            complete_stats_list['clustermgmt']['cluster'].append(cluster_unique_key_strings)
-            for key_string in cluster_unique_key_strings:
+            stats_count += len(self.unique_cluster_count_metrics)
+            complete_stats_list['clustermgmt']['cluster'].append(self.unique_cluster_count_metrics)
+            for key_string in self.unique_cluster_count_metrics:
                 setattr(self, key_string, Gauge(key_string, key_string, ['entity']))
             #endregion count
 
@@ -556,7 +574,7 @@ class NutanixMetrics:
             #region networking
             networking_client = v4_init_api_client(module='ntnx_networking_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
 
-            subnet_list = v4_get_all_entities(module=ntnx_networking_py_client,client=networking_client,function='list_subnets',limit=limit,module_entity_api='SubnetsApi')
+            subnet_list = v4_get_all_subnets(client=networking_client,limit=limit)
             self.__dict__["nutanix_count_subnet"].labels(entity=prism_central_hostname).set(len(subnet_list))
             self.__dict__["nutanix_count_subnet_vlan"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if subnet.subnet_type == 'VLAN']))
             self.__dict__["nutanix_count_subnet_vlan_basic"].labels(entity=prism_central_hostname).set(len([subnet for subnet in subnet_list if (subnet.is_advanced_networking is False) and (subnet.subnet_type == 'VLAN')]))
@@ -619,7 +637,7 @@ class NutanixMetrics:
 
             #region categories
             prism_client = v4_init_api_client(module='ntnx_prism_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-            category_list = v4_get_all_entities(module=ntnx_prism_py_client,client=prism_client,function='list_categories',limit=limit,module_entity_api='CategoriesApi')
+            category_list = v4_get_all_entities(module=ntnx_prism_py_client,client=prism_client,function='list_categories',limit=limit,module_entity_api='CategoriesApi',select='extId,key,type')
             self.__dict__["nutanix_count_category"].labels(entity=prism_central_hostname).set(len(category_list))
             self.__dict__["nutanix_count_category_system"].labels(entity=prism_central_hostname).set(len([category for category in category_list if category.type == 'SYSTEM']))
             self.__dict__["nutanix_count_category_user"].labels(entity=prism_central_hostname).set(len([category for category in category_list if category.type == 'USER']))
@@ -628,7 +646,7 @@ class NutanixMetrics:
             #endregion categories
 
             #region tasks
-            task_list = v4_get_all_entities(module=ntnx_prism_py_client,client=prism_client,function='list_tasks',limit=limit,module_entity_api='TasksApi')
+            task_list = v4_get_all_entities(module=ntnx_prism_py_client,client=prism_client,function='list_tasks',limit=limit,module_entity_api='TasksApi',select='status')
             self.__dict__["nutanix_count_task"].labels(entity=prism_central_hostname).set(len(task_list))
             self.__dict__["nutanix_count_task_queued"].labels(entity=prism_central_hostname).set(len([task for task in task_list if task.status == 'QUEUED']))
             self.__dict__["nutanix_count_task_running"].labels(entity=prism_central_hostname).set(len([task for task in task_list if task.status == 'RUNNING']))
@@ -643,7 +661,7 @@ class NutanixMetrics:
             monitoring_client = v4_init_api_client(module='ntnx_monitoring_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
             
             #region alert
-            alert_list = v4_get_all_entities(module=ntnx_monitoring_py_client,client=monitoring_client,function='list_alerts',limit=limit,module_entity_api='AlertsApi')
+            alert_list = v4_get_all_entities(module=ntnx_monitoring_py_client,client=monitoring_client,function='list_alerts',limit=limit,module_entity_api='AlertsApi',select='isResolved,isAcknowledged,severity')
             self.__dict__["nutanix_count_monitoring_alert"].labels(entity=prism_central_hostname).set(len(alert_list))
             self.__dict__["nutanix_count_monitoring_alert_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_resolved is True]))
             self.__dict__["nutanix_count_monitoring_alert_not_resolved"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if alert.is_resolved is not True]))
@@ -659,6 +677,15 @@ class NutanixMetrics:
             self.__dict__["nutanix_count_monitoring_alert_warning_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'WARNING' and alert.is_acknowledged is not True)]))
             self.__dict__["nutanix_count_monitoring_alert_critical_not_acknowledged"].labels(entity=prism_central_hostname).set(len([alert for alert in alert_list if (alert.severity == 'CRITICAL' and alert.is_acknowledged is not True)]))
             #endregion alert
+
+            #region audit
+            #! too slow to retrieve and causing rate limit issues
+            """ audit_list = v4_get_all_entities(module=ntnx_monitoring_py_client,client=monitoring_client,function='list_audits',limit=limit,module_entity_api='AuditsApi',select='status')
+            self.__dict__["nutanix_count_monitoring_audit"].labels(entity=prism_central_hostname).set(len(audit_list))
+            self.__dict__["nutanix_count_monitoring_audit_succeeded"].labels(entity=prism_central_hostname).set(len([audit for audit in audit_list if audit.status == 'SUCEEDED']))
+            self.__dict__["nutanix_count_monitoring_audit_failed"].labels(entity=prism_central_hostname).set(len([audit for audit in audit_list if audit.status == 'FAILED']))
+            self.__dict__["nutanix_count_monitoring_audit_aborted"].labels(entity=prism_central_hostname).set(len([audit for audit in audit_list if audit.status == 'ABORTED'])) """
+            #endregion audit
 
             #endregion monitoring
 
@@ -3355,7 +3382,7 @@ def get_entities_batch(api_server, username, password, offset, entity_type, enti
         return []
 
 
-def v4_get_entities(client,module,entity_api,function,page,limit=50,parent_entity_ext_id=None):
+def v4_get_entities(client,module,entity_api,function,page,limit=50,parent_entity_ext_id=None,query_filter=None,select='*'):
     '''v4_get_entities function.
         Args:
             client: a v4 Python SDK client object.
@@ -3370,13 +3397,13 @@ def v4_get_entities(client,module,entity_api,function,page,limit=50,parent_entit
     entity_api = entity_api_module(api_client=client)
     list_function = getattr(entity_api, function)
     if parent_entity_ext_id is not None:
-        response = list_function(parent_entity_ext_id,_page=page,_limit=limit)
+        response = list_function(parent_entity_ext_id,_page=page,_limit=limit,_filter=query_filter,_select=select)
     else:
-        response = list_function(_page=page,_limit=limit)
+        response = list_function(_page=page,_limit=limit,_filter=query_filter,_select=select)
     return response
 
 
-def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_entity_ext_id=None):
+def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_entity_ext_id=None,query_filter=None,select='*'):
     '''v4_get_all_entities function.
         Args:
             client: a v4 Python SDK client object.
@@ -3395,9 +3422,9 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
     entity_list=[]
     error_list=[]
     if parent_entity_ext_id is not None:
-        response = list_function(parent_entity_ext_id,_page=0,_limit=1)
+        response = list_function(parent_entity_ext_id,_page=0,_limit=1,_filter=query_filter,_select=select)
     else:
-        response = list_function(_page=0,_limit=1)
+        response = list_function(_page=0,_limit=1,_filter=query_filter,_select=select)
     total_available_results=response.metadata.total_available_results
     if total_available_results:
         page_count = math.ceil(total_available_results/limit)
@@ -3412,7 +3439,9 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
                             function=function,
                             page=page_number,
                             limit=limit,
-                            parent_entity_ext_id=parent_entity_ext_id
+                            parent_entity_ext_id=parent_entity_ext_id,
+                            query_filter=query_filter,
+                            select=select
                         ) for page_number in range(0, page_count, 1)]
                     for future in as_completed(futures):
                         try:
@@ -3422,7 +3451,7 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
                                     entity_list.extend(entities.data)
                                 else:
                                     entity_list.append(entities.data)
-                        except ntnx_dataprotection_py_client.rest.ApiException as e:
+                        except module.rest.ApiException as e:
                             error_data = json.loads(e.body)
                             for error in error_data['data']['error']:
                                 #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
@@ -3441,7 +3470,9 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
                                 function=function,
                                 page=page_number,
                                 limit=limit,
-                                parent_entity_ext_id=parent_entity_ext_id
+                                parent_entity_ext_id=parent_entity_ext_id,
+                                query_filter=query_filter,
+                                select=select
                             ) for page_number in range(0, page_count, 1)]
                         for future in as_completed(futures):
                             try:
@@ -3451,7 +3482,7 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
                                         entity_list.extend(entities.data)
                                     else:
                                         entity_list.append(entities.data)
-                            except ntnx_dataprotection_py_client.rest.ApiException as e:
+                            except module.rest.ApiException as e:
                                 error_data = json.loads(e.body)
                                 for error in error_data['data']['error']:
                                     #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
@@ -3462,7 +3493,77 @@ def v4_get_all_entities(module,client,function,limit,module_entity_api,parent_en
                             finally:
                                 progress_bar.update(1)
     else:
-        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}...{PrintColors.RESET}")
+        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for {function} in {module_entity_api}!{PrintColors.RESET}")
+    for error in error_list:
+        print(error)
+    return entity_list
+
+
+def v4_get_subnets(client,module,entity_api,function,page,limit=50):
+    '''v4_get_subnets function.
+        Args:
+            client: a v4 Python SDK client object.
+            module: name of the v4 Python SDK module to use.
+            entity_api: name of the entity API to use.
+            function: name of the function to use.
+            page: page number to fetch.
+            limit: number of entities to fetch.
+        Returns:
+    '''
+    entity_api_module = getattr(module, entity_api)
+    entity_api = entity_api_module(api_client=client)
+    list_function = getattr(entity_api, function)
+    response = list_function(_page=page,_limit=limit)
+    return response
+
+
+def v4_get_all_subnets(client,limit):
+    '''v4_get_all_subnets function.
+        Args:
+            client: a v4 Python SDK client object.
+            limit: number of entities to fetch.
+        Returns:
+    '''
+
+    entity_api = ntnx_networking_py_client.SubnetsApi(api_client=client)
+    entity_list=[]
+    error_list=[]
+    response = entity_api.list_subnets(_page=0,_limit=1)
+    total_available_results=response.metadata.total_available_results
+    if total_available_results:
+        page_count = math.ceil(total_available_results/limit)
+        if page_count > 0:
+            with tqdm.tqdm(total=page_count, desc=f"{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [DATA] Fetching pages list_subnets in SubnetsApi") as progress_bar:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(
+                            v4_get_subnets,
+                            module=ntnx_networking_py_client,
+                            entity_api='SubnetsApi',
+                            client=client,
+                            function='list_subnets',
+                            page=page_number,
+                            limit=limit
+                        ) for page_number in range(0, page_count, 1)]
+                    for future in as_completed(futures):
+                        try:
+                            entities = future.result()
+                            if hasattr(entities, 'data'):
+                                if isinstance(entities.data, Iterable):
+                                    entity_list.extend(entities.data)
+                                else:
+                                    entity_list.append(entities.data)
+                        except ntnx_monitoring_py_client.rest.ApiException as e:
+                            error_data = json.loads(e.body)
+                            for error in error_data['data']['error']:
+                                #print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}")
+                                error_message = f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] {type(e)} '{error['$objectType']}' {error['code']}: {error['message']} {PrintColors.RESET}"
+                                error_list.append(error_message)
+                        except Exception as e:
+                            print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] Task failed: {e}{PrintColors.RESET}")
+                        finally:
+                            progress_bar.update(1)
+    else:
+        print(f"{PrintColors.WARNING}{(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')} [WARNING] No entities found for list_subnets in SubnetsApi!{PrintColors.RESET}")
     for error in error_list:
         print(error)
     return entity_list
