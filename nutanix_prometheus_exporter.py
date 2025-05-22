@@ -48,6 +48,7 @@ import ntnx_datapolicies_py_client
 import ntnx_dataprotection_py_client
 import ntnx_microseg_py_client
 import ntnx_monitoring_py_client
+import ntnx_licensing_py_client
 #endregion #*IMPORT
 
 
@@ -659,7 +660,7 @@ class NutanixMetrics:
 
             #region monitoring
             monitoring_client = v4_init_api_client(module='ntnx_monitoring_py_client', prism=self.prism, user=self.user, pwd=self.pwd, prism_secure=self.prism_secure)
-            
+
             #region alert
             alert_list = v4_get_all_entities(module=ntnx_monitoring_py_client,client=monitoring_client,function='list_alerts',limit=limit,module_entity_api='AlertsApi',select='isResolved,isAcknowledged,severity')
             self.__dict__["nutanix_count_monitoring_alert"].labels(entity=prism_central_hostname).set(len(alert_list))
