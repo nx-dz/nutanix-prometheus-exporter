@@ -1,4 +1,4 @@
-FROM python:3.14.0a7-alpine
+FROM python:3.14.0b1-alpine3.21
 
 WORKDIR /~
 
@@ -59,11 +59,11 @@ ENV STORAGE_CONTAINERS_METRICS='True'
 #used to determine if IPMI metrics will be generated; set it to False value if you don't want to collect IPMI metrics. This is only valid for legacy operations mode
 #When using v4, you will need to create a separate instance to collect metrics from the IPMIs that will work in the redfish operations mode.
 #scope: legacy
-ENV IPMI_METRICS='True'
+ENV IPMI_METRICS='False'
 #used to determine if Prism Central metrics will be generated; set it to False value if you don't want to collect Prism Central metrics.
 #with v4 operations mode, this determines if most count metrics are collected or not.
 #scope: legacy, v4
-ENV PRISM_CENTRAL_METRICS='False'
+ENV PRISM_CENTRAL_METRICS='True'
 #used to determine if NCM SSP metrics will be generated; set it to False value if you don't want to collect NCM SSP metrics.
 #since there is no v4 NCM SSP API yet, this only works in legacy operations mode.
 #scope: legacy
