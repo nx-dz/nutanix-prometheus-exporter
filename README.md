@@ -11,10 +11,7 @@ The exporter has 3 differention mode of operations:
 
 1. *legacy*: this mode targets a single Prism element OR Prism Central and extracts performance metrics from the Nutanix API using v1, v2 and v3 endpoints.  When targeting Prism element, you can also retrieve storage containers, vms and IPMI metrics using environment variables to enable or disable the collection for these entity types.  When targeting Prism Central, you get in return a count for different entity types (vm count, vg count, vdisk count, etc...).  
 2. *redfish*: this mode targets a bunch of IPMI interfaces on hardware nodes and collects power consumption and thermal metrics.  
-3. *v4*: this mode is **not yet functional** and is work in progress.  It targets a Prism Central instance and collects metrics from all available entities using v4 API calls and multi-threading for better performance.  
-
-> [!WARNING] 
-> v4 mode of operations is not yet functional and is a work in progress.  Do not use for now.
+3. *v4*: this mode targets a Prism Central instance and collects metrics from all available entities using v4 API calls and multi-threading for better performance.  
 
 For available environment variables that are used to control the behavior and configuration of this prometheus exporter, review the Dockerfile content.
 
